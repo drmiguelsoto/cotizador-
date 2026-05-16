@@ -107,19 +107,34 @@ function log(msg, status) {
 
 function iniciar() {
   document.getElementById('btn').disabled = true;
-  document.getElementById('btn').textContent = 'Conectando...';
+  document.getElementById('btn').textContent = 'Cargando...';
+
+  var gapiLoaded = false;
+  var gisLoaded  = false;
+
+  function intentarConectar() {
+    if (!gapiLoaded || !gisLoaded) return;
+    document.getElementById('btn').textContent = 'Conectando con Google...';
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
 
   // Cargar GAPI
   var s1 = document.createElement('script');
   s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = function(){
     gapi.load('client', function(){
-      gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] })
-        .then(function(){ gapiReady = true; });
+      gapi.client.init({
+        apiKey: API_KEY,
+        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+      }).then(function(){
+        gapiLoaded = true;
+        intentarConectar();
+      });
     });
   };
   document.head.appendChild(s1);
 
+  // Cargar GIS
   var s2 = document.createElement('script');
   s2.src = 'https://accounts.google.com/gsi/client';
   s2.onload = function(){
@@ -127,20 +142,19 @@ function iniciar() {
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: function(resp){
-        if (resp.error) { log('Error de autenticación: ' + resp.error, 'err'); return; }
+        if (resp.error) {
+          log('Error de autenticación: ' + resp.error, 'err');
+          document.getElementById('btn').disabled = false;
+          document.getElementById('btn').textContent = '☁ Crear carpetas en Drive';
+          return;
+        }
         token = resp.access_token;
         gapi.client.setToken({ access_token: token });
         crearEstructura();
       }
     });
-
-    // Esperar a que GAPI esté listo
-    var wait = setInterval(function(){
-      if (gapiReady) {
-        clearInterval(wait);
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      }
-    }, 200);
+    gisLoaded = true;
+    intentarConectar();
   };
   document.head.appendChild(s2);
 }
