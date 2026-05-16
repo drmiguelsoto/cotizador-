@@ -4,206 +4,148 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Crear Estructura — Miguel Soto Universe</title>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  :root { --black:#030707; --white:#F4F2F1; --green:#0f9d58; --red:#c0392b; --mid:#6B6059; --border:#D8D2CB; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--black); color:var(--white); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:#030707; color:#F4F2F1; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
   .card { background:#0f1a1a; border:1px solid #1a2f2f; border-radius:12px; padding:40px; max-width:560px; width:100%; }
-  .logo { font-size:11px; letter-spacing:4px; color:var(--mid); margin-bottom:8px; }
+  .logo { font-size:11px; letter-spacing:4px; color:#6B6059; margin-bottom:8px; }
   h1 { font-size:22px; font-weight:300; letter-spacing:1px; margin-bottom:6px; }
-  p { font-size:13px; color:var(--mid); line-height:1.6; margin-bottom:28px; }
-  .btn { display:block; width:100%; padding:16px; background:var(--green); color:#fff; border:none; border-radius:6px; font-size:13px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:background .2s; }
+  p { font-size:13px; color:#6B6059; line-height:1.6; margin-bottom:28px; }
+  .btn { display:block; width:100%; padding:16px; background:#0f9d58; color:#fff; border:none; border-radius:6px; font-size:13px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; }
   .btn:hover { background:#0b7a44; }
   .btn:disabled { background:#1a4a32; color:#3a7a5a; cursor:not-allowed; }
-  .log { margin-top:24px; background:#060e0e; border-radius:6px; padding:16px; max-height:320px; overflow-y:auto; font-size:11px; line-height:2; font-family:monospace; display:none; }
-  .log.show { display:block; }
-  .log-item { display:flex; align-items:center; gap:8px; }
-  .log-item.ok { color:#3dd68c; }
-  .log-item.pending { color:#f4b942; }
-  .log-item.err { color:#e74c3c; }
-  .done-msg { margin-top:20px; padding:16px; background:#0a2a1a; border:1px solid #1a5a3a; border-radius:6px; font-size:13px; color:#3dd68c; display:none; text-align:center; }
-  .done-msg.show { display:block; }
+  .log { margin-top:24px; background:#060e0e; border-radius:6px; padding:16px; max-height:320px; overflow-y:auto; font-size:11px; line-height:2; font-family:monospace; }
+  .ok { color:#3dd68c; }
+  .err { color:#e74c3c; }
+  .wait { color:#f4b942; }
+  .done { margin-top:20px; padding:16px; background:#0a2a1a; border:1px solid #1a5a3a; border-radius:6px; font-size:13px; color:#3dd68c; text-align:center; }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">MIGUEL SOTO UNIVERSE</div>
   <h1>Crear estructura de Drive</h1>
-  <p>Este script creará automáticamente todas las carpetas del ecosistema en tu Google Drive. Solo da clic en el botón y autoriza el acceso.</p>
-
-  <button class="btn" id="btn" onclick="iniciar()">☁ Crear carpetas en Drive</button>
-
-  <div class="log" id="log"></div>
-  <div class="done-msg" id="done">✓ Estructura creada exitosamente en Google Drive</div>
+  <p>Crea automáticamente todas las carpetas del ecosistema en tu Google Drive. Da clic en el botón y autoriza el acceso con <strong>miguelsotouniverse@gmail.com</strong></p>
+  <button class="btn" id="btn" onclick="handleClick()">☁ Crear carpetas en Drive</button>
+  <div class="log" id="log" style="display:none"></div>
 </div>
 
 <script>
-const CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
-const API_KEY   = 'AIzaSyA7unb6FzyjEubqmrCkAxkxqvJbmnz9dDU';
-const SCOPES    = 'https://www.googleapis.com/auth/drive.file';
+var CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
+var API_KEY   = 'AIzaSyA7unb6FzyjEubqmrCkAxkxqvJbmnz9dDU';
+var SCOPE     = 'https://www.googleapis.com/auth/drive.file';
 
-// Estructura completa del Drive
-const ESTRUCTURA = [
-  { nombre: '📁 Miguel Soto Universe', hijos: [
-    { nombre: '01 — Consultas de Cirugía Plástica', hijos: [
-      { nombre: 'Primera Vez' },
-      { nombre: 'Subsecuentes' },
-      { nombre: 'Preoperatorias' },
-      { nombre: 'Preanestésicas' }
-    ]},
-    { nombre: '02 — Terapia Postoperatoria', hijos: [
-      { nombre: 'Fibrosis Zero' },
-      { nombre: 'MedSpa' }
-    ]},
-    { nombre: '03 — E-Commerce', hijos: [
-      { nombre: 'Línea Dermocosmética' },
-      { nombre: 'Suplementos Alimenticios' },
-      { nombre: 'Aditamentos Postoperatorios' }
-    ]},
-    { nombre: '04 — Inyectables' },
-    { nombre: '05 — Energy Devices', hijos: [
-      { nombre: 'Endolift' },
-      { nombre: 'Morpheus8' },
-      { nombre: 'Otros Dispositivos' }
-    ]},
-    { nombre: '06 — Medicina Regenerativa' },
-    { nombre: '07 — Bionics Anti-Aging Systems', hijos: [
-      { nombre: 'Pitch & Inversión' },
-      { nombre: 'Research & Desarrollo' },
-      { nombre: 'Patentes & IP' }
-    ]},
-    { nombre: '08 — Marketing & Contenido', hijos: [
-      { nombre: 'Instagram & Redes' },
-      { nombre: 'Video & Postop Content' },
-      { nombre: 'Branding & Assets' },
-      { nombre: 'Campañas por Módulo' }
-    ]},
-    { nombre: '09 — Finanzas & Admin', hijos: [
-      { nombre: 'Contabilidad' },
-      { nombre: 'Legal & Contratos' },
-      { nombre: 'Recursos Humanos' }
-    ]},
-    { nombre: '10 — Cotizaciones', hijos: [
-      { nombre: 'Mayo 2026' },
-      { nombre: 'Junio 2026' }
-    ]}
-  ]}
+var FOLDERS = [
+  ['01 — Consultas de Cirugía Plástica', ['Primera Vez','Subsecuentes','Preoperatorias','Preanestésicas']],
+  ['02 — Terapia Postoperatoria', ['Fibrosis Zero','MedSpa']],
+  ['03 — E-Commerce', ['Línea Dermocosmética','Suplementos Alimenticios','Aditamentos Postoperatorios']],
+  ['04 — Inyectables', []],
+  ['05 — Energy Devices', ['Endolift','Morpheus8','Otros Dispositivos']],
+  ['06 — Medicina Regenerativa', []],
+  ['07 — Bionics Anti-Aging Systems', ['Pitch & Inversión','Research & Desarrollo','Patentes & IP']],
+  ['08 — Marketing & Contenido', ['Instagram & Redes','Video & Postop Content','Branding & Assets','Campañas por Módulo']],
+  ['09 — Finanzas & Admin', ['Contabilidad','Legal & Contratos','Recursos Humanos']],
+  ['10 — Cotizaciones', ['Mayo 2026','Junio 2026','Julio 2026']]
 ];
 
-let token = null;
-let tokenClient = null;
-let gapiReady = false;
+var accessToken = null;
 
-function log(msg, status) {
-  var el = document.getElementById('log');
-  el.classList.add('show');
-  var item = document.createElement('div');
-  item.className = 'log-item ' + (status||'pending');
-  item.innerHTML = (status==='ok' ? '✓' : status==='err' ? '✗' : '⟳') + ' ' + msg;
-  el.appendChild(item);
-  el.scrollTop = el.scrollHeight;
-  return item;
+function addLog(msg, cls) {
+  var log = document.getElementById('log');
+  log.style.display = 'block';
+  var d = document.createElement('div');
+  d.className = cls || 'wait';
+  d.textContent = (cls==='ok' ? '✓ ' : cls==='err' ? '✗ ' : '⟳ ') + msg;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
 }
 
-function iniciar() {
+function handleClick() {
   document.getElementById('btn').disabled = true;
-  document.getElementById('btn').textContent = 'Cargando...';
+  document.getElementById('btn').textContent = 'Esperando autorización...';
 
-  var gapiLoaded = false;
-  var gisLoaded  = false;
-
-  function intentarConectar() {
-    if (!gapiLoaded || !gisLoaded) return;
-    document.getElementById('btn').textContent = 'Conectando con Google...';
-    tokenClient.requestAccessToken({ prompt: 'consent' });
-  }
-
-  // Cargar GAPI
-  var s1 = document.createElement('script');
-  s1.src = 'https://apis.google.com/js/api.js';
-  s1.onload = function(){
-    gapi.load('client', function(){
-      gapi.client.init({
-        apiKey: API_KEY,
-        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
-      }).then(function(){
-        gapiLoaded = true;
-        intentarConectar();
-      });
-    });
-  };
-  document.head.appendChild(s1);
-
-  // Cargar GIS
-  var s2 = document.createElement('script');
-  s2.src = 'https://accounts.google.com/gsi/client';
-  s2.onload = function(){
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: function(resp){
-        if (resp.error) {
-          log('Error de autenticación: ' + resp.error, 'err');
-          document.getElementById('btn').disabled = false;
-          document.getElementById('btn').textContent = '☁ Crear carpetas en Drive';
-          return;
+  var tries = 0;
+  var interval = setInterval(function() {
+    tries++;
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      clearInterval(interval);
+      var tc = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback: function(resp) {
+          if (resp.error) {
+            addLog('Error: ' + resp.error, 'err');
+            document.getElementById('btn').disabled = false;
+            document.getElementById('btn').textContent = '☁ Crear carpetas en Drive';
+            return;
+          }
+          accessToken = resp.access_token;
+          addLog('Autenticado con Google', 'ok');
+          document.getElementById('btn').textContent = 'Creando carpetas...';
+          setTimeout(iniciarCreacion, 500);
         }
-        token = resp.access_token;
-        gapi.client.setToken({ access_token: token });
-        crearEstructura();
-      }
-    });
-    gisLoaded = true;
-    intentarConectar();
-  };
-  document.head.appendChild(s2);
+      });
+      tc.requestAccessToken({ prompt: 'consent' });
+    }
+    if (tries > 30) {
+      clearInterval(interval);
+      addLog('Timeout: recarga la página e intenta de nuevo', 'err');
+      document.getElementById('btn').disabled = false;
+      document.getElementById('btn').textContent = '☁ Crear carpetas en Drive';
+    }
+  }, 200);
 }
 
-async function crearCarpeta(nombre, parentId) {
+function crearFolder(nombre, parentId, cb) {
   var meta = { name: nombre, mimeType: 'application/vnd.google-apps.folder' };
   if (parentId) meta.parents = [parentId];
-
-  var resp = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+  fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify(meta)
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.id) cb(null, d.id);
+    else cb(new Error(d.error ? d.error.message : 'Sin ID'));
+  }).catch(cb);
+}
+
+function iniciarCreacion() {
+  crearFolder('📁 Miguel Soto Universe', null, function(err, rootId) {
+    if (err) { addLog('Error creando raíz: ' + err.message, 'err'); return; }
+    addLog('📁 Miguel Soto Universe', 'ok');
+    crearSiguiente(0, rootId);
   });
-  var data = await resp.json();
-  if (!data.id) throw new Error('No se pudo crear: ' + nombre);
-  return data.id;
 }
 
-async function crearRecursivo(nodo, parentId) {
-  var item = log(nodo.nombre, 'pending');
-  try {
-    var id = await crearCarpeta(nodo.nombre, parentId);
-    item.className = 'log-item ok';
-    item.innerHTML = '✓ ' + nodo.nombre;
-    if (nodo.hijos) {
-      for (var h of nodo.hijos) {
-        await crearRecursivo(h, id);
-      }
-    }
-  } catch(e) {
-    item.className = 'log-item err';
-    item.innerHTML = '✗ ' + nodo.nombre + ' — ' + e.message;
-  }
-}
-
-async function crearEstructura() {
-  document.getElementById('btn').textContent = 'Creando carpetas...';
-  log('Iniciando creación de estructura...', 'ok');
-  try {
-    for (var nodo of ESTRUCTURA) {
-      await crearRecursivo(nodo, null);
-    }
-    document.getElementById('done').classList.add('show');
+function crearSiguiente(i, rootId) {
+  if (i >= FOLDERS.length) {
     document.getElementById('btn').textContent = '✓ Completado';
-  } catch(e) {
-    log('Error general: ' + e.message, 'err');
-    document.getElementById('btn').disabled = false;
-    document.getElementById('btn').textContent = 'Reintentar';
+    var done = document.createElement('div');
+    done.className = 'done';
+    done.textContent = '✓ Estructura creada en Google Drive';
+    document.querySelector('.card').appendChild(done);
+    return;
   }
+  var nombre = FOLDERS[i][0];
+  var hijos  = FOLDERS[i][1];
+  crearFolder(nombre, rootId, function(err, parentId) {
+    if (err) { addLog('Error: ' + nombre, 'err'); crearSiguiente(i+1, rootId); return; }
+    addLog(nombre, 'ok');
+    crearHijos(hijos, 0, parentId, function() {
+      crearSiguiente(i+1, rootId);
+    });
+  });
+}
+
+function crearHijos(hijos, j, parentId, done) {
+  if (j >= hijos.length) { done(); return; }
+  crearFolder(hijos[j], parentId, function(err) {
+    if (err) addLog('Error: ' + hijos[j], 'err');
+    else addLog('  └ ' + hijos[j], 'ok');
+    crearHijos(hijos, j+1, parentId, done);
+  });
 }
 </script>
 </body>
