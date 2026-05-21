@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Gestión · Dr. Miguel Soto Universe</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080810;
+  --surface: #10101c;
+  --surface2: #18182a;
+  --surface3: #20203a;
+  --border: #28283d;
+  --border2: #35355a;
+  --gold: #c8a96e;
+  --gold2: #a07840;
+  --gold-glow: rgba(200,169,110,0.08);
+  --text: #eae6de;
+  --muted: #6a677f;
+  --muted2: #4a4760;
+  --green: #4a9e72;
+  --yellow: #c8a040;
+  --red: #b05050;
+  --green-bg: rgba(74,158,114,0.12);
+  --yellow-bg: rgba(200,160,64,0.12);
+  --red-bg: rgba(176,80,80,0.12);
+  --r: 10px;
+  --r-sm: 6px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 32px; height: 32px;
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.brand-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+.header-date {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+
+/* ── NAV ── */
+.nav {
+  display: flex;
+  gap: 2px;
+  padding: 12px 28px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.nav-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* ── MAIN ── */
+main {
+  flex: 1;
+  padding: 28px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── SECTION ── */
+.section { display: none; }
+.section.active { display: block; }
+
+/* ── PAGE TITLE ── */
+.page-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.page-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 28px;
+  letter-spacing: 0.04em;
+}
+
+/* ── CARD ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 18px;
+}
+
+/* ── FORM GRID ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-grid.full { grid-template-columns: 1fr; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field.span2 { grid-column: span 2; }
+.field.span3 { grid-column: span 3; }
+
+.field label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--gold2);
+}
+
+.field select option { background: var(--surface2); }
+.field textarea { resize: vertical; min-height: 80px; }
+
+/* ── BUTTON ── */
+.btn {
+  padding: 10px 22px;
+  border-radius: var(--r-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--gold);
+  color: var(--bg);
+}
+.btn-primary:hover { background: var(--gold2); }
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+}
+.btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+}
+.btn-ghost:hover { color: var(--text); }
+
+.btn-sm { padding: 7px 14px; font-size: 11px; }
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+/* ── SEARCH BAR ── */
+.search-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.search-input-wrap input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 11px 14px 11px 38px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input-wrap input:focus { border-color: var(--gold2); }
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* ── PATIENT CARD ── */
+.patient-list { display: flex; flex-direction: column; gap: 10px; }
+
+.patient-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.patient-row:hover {
+  border-color: var(--border2);
+  background: var(--surface2);
+}
+
+.patient-row-left { display: flex; align-items: center; gap: 14px; }
+
+.patient-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.patient-name {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.patient-meta {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.patient-row-right { display: flex; align-items: center; gap: 12px; }
+
+/* ── BADGE / SEMÁFORO ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge-green { background: var(--green-bg); color: var(--green); }
+.badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.badge-red { background: var(--red-bg); color: var(--red); }
+.badge-muted { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ── PATIENT DETAIL ── */
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.detail-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 30px;
+  font-weight: 300;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.detail-id {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── FINANCIAL SUMMARY ── */
+.fin-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.fin-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+}
+
+.fin-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.fin-amount {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.fin-amount.green { color: var(--green); }
+.fin-amount.red { color: var(--red); }
+.fin-amount.gold { color: var(--gold); }
+
+/* ── PROGRESS BAR ── */
+.progress-wrap { margin: 16px 0; }
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.progress-track {
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* ── PAYMENTS TABLE ── */
+.payments-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.payments-table th {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.payments-table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.payments-table tr:last-child td { border-bottom: none; }
+.payments-table tr:hover td { background: var(--surface2); }
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border: 1px dashed var(--border2);
+  border-radius: var(--r);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface2);
+}
+
+.upload-zone:hover { border-color: var(--gold2); background: var(--gold-glow); }
+.upload-zone input { display: none; }
+.upload-zone-icon { font-size: 24px; color: var(--muted); margin-bottom: 8px; }
+.upload-zone-text { font-size: 12px; color: var(--muted); }
+.upload-zone-text strong { color: var(--gold); }
+
+.upload-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface3);
+  border-radius: var(--r-sm);
+  margin-top: 10px;
+}
+
+.upload-thumb {
+  width: 48px; height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.upload-info { flex: 1; }
+.upload-name { font-size: 12px; color: var(--text); margin-bottom: 2px; }
+.upload-size { font-size: 10px; color: var(--muted); }
+
+/* ── RECON TABLE ── */
+.recon-group { margin-bottom: 20px; }
+
+.recon-group-title {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.recon-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+
+.recon-row:last-child { border-bottom: none; }
+.recon-terminal { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+.recon-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--surface2);
+  border-radius: var(--r-sm);
+  margin-top: 16px;
+  border: 1px solid var(--border);
+}
+
+.recon-total-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.recon-total-amount {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  color: var(--gold);
+}
+
+/* ── DIVIDER ── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.empty-state-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+.empty-state-text { font-size: 13px; line-height: 1.6; }
+
+/* ── BACK BUTTON ── */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 20px;
+  transition: color 0.2s;
+}
+
+.back-btn:hover { color: var(--text); }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  max-width: 320px;
+}
+
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 28px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-weight: 300;
+  margin-bottom: 20px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 680px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid.three { grid-template-columns: 1fr; }
+  .field.span2, .field.span3 { grid-column: span 1; }
+  .fin-summary { grid-template-columns: 1fr; }
+  main { padding: 16px; }
+  .nav { padding: 8px 16px 0; }
+  .header { padding: 12px 16px; }
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section.active { animation: fadeIn 0.25s ease; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <div class="logo">M</div>
+    <div>
+      <div class="brand-name">Dr. Miguel Soto Universe</div>
+      <div class="brand-sub">Sistema de Gestión · Fase 1</div>
+    </div>
+  </div>
+  <div class="header-date" id="header-date"></div>
+</div>
+
+<!-- NAV -->
+<div class="nav">
+  <button class="nav-tab active" onclick="showSection('buscar')">🔍 Buscar Paciente</button>
+  <button class="nav-tab" onclick="showSection('nuevo')">➕ Nuevo Paciente</button>
+  <button class="nav-tab" onclick="showSection('pago')">💳 Registrar Pago</button>
+  <button class="nav-tab" onclick="showSection('conciliacion')">📊 Conciliación Diaria</button>
+</div>
+
+<!-- MAIN -->
+<main>
+
+  <!-- ── BUSCAR ── -->
+  <div id="section-buscar" class="section active">
+    <div id="view-lista">
+      <h1 class="page-title">Pacientes</h1>
+      <p class="page-sub">Busca por nombre para ver el expediente financiero completo</p>
+
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Nombre del paciente…" oninput="filterPatients(this.value)">
+        </div>
+        <button class="btn btn-primary" onclick="showSection('nuevo')">+ Nuevo</button>
+      </div>
+
+      <div class="patient-list" id="patient-list"></div>
+    </div>
+
+    <div id="view-detalle" style="display:none;">
+      <button class="back-btn" onclick="showLista()">← Volver a la lista</button>
+      <div id="detalle-content"></div>
+    </div>
+  </div>
+
+  <!-- ── NUEVO PACIENTE ── -->
+  <div id="section-nuevo" class="section">
+    <h1 class="page-title">Nuevo Paciente</h1>
+    <p class="page-sub">Datos desde el apartado de consulta</p>
+
+    <div class="card">
+      <div class="card-title">Datos Personales</div>
+      <div class="form-grid">
+        <div class="field span2">
+          <label>Nombre Completo *</label>
+          <input type="text" id="np-nombre" placeholder="Ej. Magdalena Solano Vargas">
+        </div>
+        <div class="field">
+          <label>Fecha de Nacimiento *</label>
+          <input type="date" id="np-nacimiento">
+        </div>
+        <div class="field">
+          <label>Lugar de Residencia</label>
+          <input type="text" id="np-residencia" placeholder="Ciudad, Estado">
+        </div>
+        <div class="field">
+          <label>Teléfono *</label>
+          <input type="tel" id="np-telefono" placeholder="55 1234 5678">
+        </div>
+        <div class="field">
+          <label>Correo Electrónico *</label>
+          <input type="email" id="np-correo" placeholder="nombre@correo.com">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Origen y Consulta</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Procedencia *</label>
+          <select id="np-procedencia">
+            <option value="">Seleccionar…</option>
+            <option>Facebook</option>
+            <option>Instagram</option>
+            <option>YouTube</option>
+            <option>Google</option>
+            <option>Recomendación</option>
+            <option>TV</option>
+            <option>Radio</option>
+            <option>IA / ChatGPT</option>
+            <option>Subsecuente</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Referido por</label>
+          <input type="text" id="np-referido" placeholder="Nombre de quien refiere">
+        </div>
+        <div class="field">
+          <label>Médico que atiende *</label>
+          <select id="np-medico">
+            <option value="">Seleccionar…</option>
+            <option>Miguel Soto</option>
+            <option>Laura Tagle</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Fecha de Consulta</label>
+          <input type="date" id="np-fecha-consulta">
+        </div>
+        <div class="field">
+          <label>Tipo de Consulta</label>
+          <select id="np-tipo-consulta">
+            <option value="">Seleccionar…</option>
+            <option>Cirugía plástica (Dr. Soto) — $1,500</option>
+            <option>Medicina estética — $700</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Motivo de Consulta</label>
+          <input type="text" id="np-motivo" placeholder="Ej. Rinoplastia, liposucción…">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Identificación Oficial</div>
+      <div class="upload-zone" onclick="document.getElementById('ine-upload').click()">
+        <input type="file" id="ine-upload" accept="image/*" capture="environment" onchange="previewINE(this)">
+        <div class="upload-zone-icon">📷</div>
+        <div class="upload-zone-text">Toca para fotografiar o seleccionar<br><strong>INE o Pasaporte</strong></div>
+      </div>
+      <div id="ine-preview"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="showSection('buscar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPaciente()">Guardar Paciente</button>
+    </div>
+  </div>
+
+  <!-- ── REGISTRAR PAGO ── -->
+  <div id="section-pago" class="section">
+    <h1 class="page-title">Registrar Pago</h1>
+    <p class="page-sub">Selecciona el paciente y captura la transacción</p>
+
+    <div class="card">
+      <div class="card-title">Paciente</div>
+      <div class="field">
+        <label>Buscar Paciente *</label>
+        <select id="pago-paciente" onchange="updateSaldoPaciente()">
+          <option value="">Seleccionar paciente…</option>
+        </select>
+      </div>
+      <div id="pago-saldo-info" style="margin-top:12px; display:none;">
+        <div class="fin-summary" style="grid-template-columns:1fr 1fr 1fr; margin-bottom:0;">
+          <div class="fin-box">
+            <div class="fin-label">Presupuesto</div>
+            <div class="fin-amount gold" id="pago-presupuesto-val">—</div>
+          </div>
+          <div class="fin-box">
+            <div class="fin-label">Pagado</div>
+            <div class="fin-amount green" id="pago-pagado-val">—</div>
+          </div>
+          <div class="fin-box">
+            <div class="fin-label">Saldo Pendiente</div>
+            <div class="fin-amount red" id="pago-saldo-val">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Detalle del Pago</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Fecha *</label>
+          <input type="date" id="pago-fecha">
+        </div>
+        <div class="field">
+          <label>Monto *</label>
+          <input type="number" id="pago-monto" placeholder="0.00" min="0" oninput="checkVoucher()">
+        </div>
+        <div class="field">
+          <label>Tipo de Ingreso *</label>
+          <select id="pago-tipo">
+            <option value="">Seleccionar…</option>
+            <option>Apartado de consulta</option>
+            <option>Diferencial de consulta</option>
+            <option>Anticipo de cirugía</option>
+            <option>Liquidación</option>
+            <option>Full price</option>
+            <option>Pago con descuento</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Medio de Pago *</label>
+          <select id="pago-medio" onchange="checkVoucher()">
+            <option value="">Seleccionar…</option>
+            <option>Efectivo</option>
+            <option>TDD</option>
+            <option>TDC</option>
+            <option>Transferencia</option>
+            <option>SPEI</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Terminal / Banco *</label>
+          <select id="pago-terminal">
+            <option value="">Seleccionar…</option>
+            <option>Multiva MS</option>
+            <option>HSBC MS</option>
+            <option>Efectivo — Caja</option>
+            <option>BBVA</option>
+            <option>Banorte</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Efectuó Cobro *</label>
+          <select id="pago-cobrador">
+            <option value="">Seleccionar…</option>
+            <option>Valeria Lima</option>
+            <option>Anahí Alvarado</option>
+            <option>Susana Palacios</option>
+            <option>Miguel Soto</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Médico Titular</label>
+          <select id="pago-medico-titular">
+            <option value="">Seleccionar…</option>
+            <option>Miguel Soto</option>
+            <option>Laura Tagle</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Factura #</label>
+          <input type="text" id="pago-factura" placeholder="No. o 'No aplica'">
+        </div>
+        <div class="field span3">
+          <label>Observaciones</label>
+          <input type="text" id="pago-obs" placeholder="Notas adicionales…">
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="voucher-card" style="display:none;">
+      <div class="card-title">📸 Foto de Voucher <span style="color:var(--red); font-size:10px; margin-left:4px;">REQUERIDA</span></div>
+      <div class="upload-zone" onclick="document.getElementById('voucher-upload').click()">
+        <input type="file" id="voucher-upload" accept="image/*" capture="environment" onchange="previewVoucher(this)">
+        <div class="upload-zone-icon">🧾</div>
+        <div class="upload-zone-text">Toca para fotografiar el <strong>voucher de tarjeta</strong></div>
+      </div>
+      <div id="voucher-preview"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="showSection('buscar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPago()">Registrar Pago</button>
+    </div>
+  </div>
+
+  <!-- ── CONCILIACIÓN ── -->
+  <div id="section-conciliacion" class="section">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:4px;">
+      <div>
+        <h1 class="page-title">Conciliación Diaria</h1>
+        <p class="page-sub" id="recon-fecha-label"></p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="date" id="recon-fecha" onchange="renderConciliacion()" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:8px 12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; outline:none;">
+        <button class="btn btn-outline btn-sm" onclick="exportReporte()">⬇ Exportar Reporte</button>
+        <button class="btn btn-primary btn-sm" onclick="cerrarDia()">✓ Cerrar Día</button>
+      </div>
+    </div>
+
+    <div id="recon-content"></div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- SCRIPT -->
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────
+const SHEET_ID = "1Ods3_GSxoR5Be9FyGSz_kPfDjyUhMLjD98x6nwFmyLk";
+const DRIVE_FOLDER = "1cW_UsemHic4aTCCFaL5av39ptXNBDR2h";
+const APPS_SCRIPT_URL = ""; // ← Pegar URL de Apps Script aquí
+
+// ─── LOCAL STATE (persiste en localStorage) ──────────────────
+function getState() {
+  try {
+    return JSON.parse(localStorage.getItem('ms_sistema') || '{"pacientes":[],"pagos":[]}');
+  } catch(e) {
+    return { pacientes: [], pagos: [] };
+  }
+}
+
+function saveState(state) {
+  localStorage.setItem('ms_sistema', JSON.stringify(state));
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+function init() {
+  // Header date
+  const now = new Date();
+  document.getElementById('header-date').innerHTML =
+    `<div>${now.toLocaleDateString('es-MX', {weekday:'long', year:'numeric', month:'long', day:'numeric'})}</div>
+     <div style="font-size:10px; margin-top:2px; opacity:0.6;">Sistema de Gestión v1.0</div>`;
+
+  // Default dates
+  const today = now.toISOString().split('T')[0];
+  const pagoFecha = document.getElementById('pago-fecha');
+  if (pagoFecha) pagoFecha.value = today;
+  const reconFecha = document.getElementById('recon-fecha');
+  if (reconFecha) reconFecha.value = today;
+  const npFechaConsulta = document.getElementById('np-fecha-consulta');
+  if (npFechaConsulta) npFechaConsulta.value = today;
+
+  renderPatientList('');
+  populatePacienteSelect();
+  renderConciliacion();
+}
+
+// ─── NAV ──────────────────────────────────────────────────────
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  const tabs = { buscar: 0, nuevo: 1, pago: 2, conciliacion: 3 };
+  document.querySelectorAll('.nav-tab')[tabs[id]].classList.add('active');
+
+  if (id === 'buscar') showLista();
+  if (id === 'conciliacion') renderConciliacion();
+  if (id === 'pago') populatePacienteSelect();
+}
+
+function showLista() {
+  document.getElementById('view-lista').style.display = 'block';
+  document.getElementById('view-detalle').style.display = 'none';
+  renderPatientList(document.getElementById('search-input').value);
+}
+
+// ─── PATIENT LIST ─────────────────────────────────────────────
+function renderPatientList(query) {
+  const state = getState();
+  const list = document.getElementById('patient-list');
+  const filtered = state.pacientes.filter(p =>
+    p.nombre.toLowerCase().includes(query.toLowerCase())
+  );
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">👤</div>
+      <div class="empty-state-text">${query ? 'No se encontraron pacientes con ese nombre.' : 'Aún no hay pacientes registrados.<br>Empieza creando el primero.'}</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(p => {
+    const { pagado, saldo, semaforo } = calcFinanciero(p);
+    const badge = semaforo === 'verde'
+      ? `<span class="badge badge-green"><span class="dot"></span>Liquidado</span>`
+      : semaforo === 'amarillo'
+      ? `<span class="badge badge-yellow"><span class="dot"></span>Anticipo parcial</span>`
+      : `<span class="badge badge-red"><span class="dot"></span>Sin anticipo</span>`;
+
+    const initials = p.nombre.split(' ').slice(0,2).map(n => n[0]).join('').toUpperCase();
+
+    return `<div class="patient-row" onclick="showDetalle('${p.id}')">
+      <div class="patient-row-left">
+        <div class="patient-avatar">${initials}</div>
+        <div>
+          <div class="patient-name">${p.nombre}</div>
+          <div class="patient-meta">${p.medico || '—'} · ${p.procedimiento || 'Sin procedimiento'} · ${p.fechaConsulta || 'Sin fecha'}</div>
+        </div>
+      </div>
+      <div class="patient-row-right">
+        ${p.presupuesto ? `<span style="font-size:12px; color:var(--muted);">Saldo: <strong style="color:var(--text);">${formatMoney(saldo)}</strong></span>` : ''}
+        ${badge}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterPatients(q) {
+  renderPatientList(q);
+}
+
+// ─── DETALLE ──────────────────────────────────────────────────
+function showDetalle(id) {
+  const state = getState();
+  const p = state.pacientes.find(x => x.id === id);
+  if (!p) return;
+
+  const { pagado, saldo, pct, semaforo } = calcFinanciero(p);
+  const pagos = state.pagos.filter(x => x.pacienteId === id);
+
+  const semaforoColor = semaforo === 'verde' ? 'green' : semaforo === 'amarillo' ? 'gold' : 'red';
+  const semaforoLabel = semaforo === 'verde' ? '🟢 Liquidado' : semaforo === 'amarillo' ? '🟡 Anticipo parcial' : '🔴 Sin anticipo';
+
+  let pagosHTML = pagos.length === 0
+    ? `<div class="empty-state" style="padding:24px;"><div class="empty-state-text">Sin pagos registrados</div></div>`
+    : `<table class="payments-table">
+        <thead><tr>
+          <th>Fecha</th><th>Tipo</th><th>Medio</th><th>Terminal</th><th>Monto</th><th>Cobró</th>
+        </tr></thead>
+        <tbody>
+          ${pagos.map(pg => `<tr>
+            <td>${pg.fecha}</td>
+            <td>${pg.tipo}</td>
+            <td>${pg.medio}</td>
+            <td><span style="font-size:11px; color:var(--muted);">${pg.terminal}</span></td>
+            <td><strong style="color:var(--green);">${formatMoney(pg.monto)}</strong></td>
+            <td>${pg.cobrador}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  document.getElementById('detalle-content').innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-name">${p.nombre}</div>
+        <div class="detail-id">EXP-${p.id} · ${p.procedencia || 'Procedencia no registrada'}</div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="badge badge-${semaforoColor === 'green' ? 'green' : semaforoColor === 'gold' ? 'yellow' : 'red'}">${semaforoLabel}</span>
+        <button class="btn btn-primary btn-sm" onclick="irRegistrarPago('${p.id}')">+ Registrar Pago</button>
+      </div>
+    </div>
+
+    <!-- Presupuesto ligado desde cotizador -->
+    <div class="card" style="border-left: 3px solid var(--gold);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:${p.presupuesto ? '16px' : '0'};">
+        <div class="card-title" style="margin-bottom:0;">Presupuesto del Cotizador</div>
+        <button class="btn btn-outline btn-sm" onclick="buscarPresupuestoEnDrive('${p.id}')">
+          ☁ ${p.presupuesto ? 'Actualizar desde Drive' : 'Ligar Presupuesto'}
+        </button>
+      </div>
+      ${p.presupuesto ? `
+      <div class="fin-summary" style="margin-bottom:16px;">
+        <div class="fin-box">
+          <div class="fin-label">Presupuesto Total</div>
+          <div class="fin-amount gold">${formatMoney(p.presupuesto)}</div>
+        </div>
+        <div class="fin-box">
+          <div class="fin-label">Total Pagado</div>
+          <div class="fin-amount green">${formatMoney(pagado)}</div>
+        </div>
+        <div class="fin-box">
+          <div class="fin-label">Saldo Pendiente</div>
+          <div class="fin-amount red">${formatMoney(saldo)}</div>
+        </div>
+      </div>
+      <div class="progress-wrap" style="margin:0;">
+        <div class="progress-label">
+          <span>Avance de pago</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>
+      ${p.presupuestoPdf ? `<div style="margin-top:12px; font-size:12px; color:var(--muted);">📄 <a href="${p.presupuestoPdf}" target="_blank" style="color:var(--gold); text-decoration:none;">${p.presupuestoNombre || 'Ver PDF en Drive'}</a></div>` : ''}
+      ` : `<div style="font-size:13px; color:var(--muted); padding:12px 0;">Sin presupuesto ligado aún. El Dr. Soto genera el presupuesto desde el cotizador y al marcarlo como <strong style="color:var(--gold);">ACEPTADA</strong> se puede ligar aquí automáticamente.</div>`}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Datos del Paciente</div>
+      <div class="form-grid">
+        ${field('Fecha de Nacimiento', p.nacimiento || '—')}
+        ${field('Teléfono', p.telefono || '—')}
+        ${field('Correo', p.correo || '—')}
+        ${field('Residencia', p.residencia || '—')}
+        ${field('Procedencia', p.procedencia || '—')}
+        ${field('Referido por', p.referido || '—')}
+        ${field('Médico', p.medico || '—')}
+        ${field('Consulta', p.tipoConsulta || '—')}
+        ${field('Motivo', p.motivo || '—')}
+        ${field('Procedimiento', p.procedimiento || '—')}
+        ${field('Fecha Procedimiento', p.fechaProc || '—')}
+        ${field('Status Presupuesto', p.statusPresupuesto || '—')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Historial de Pagos</div>
+      ${pagosHTML}
+    </div>
+
+    ${p.ineUrl ? `<div class="card">
+      <div class="card-title">Identificación Oficial</div>
+      <img src="${p.ineUrl}" style="max-width:100%; border-radius:var(--r-sm); border:1px solid var(--border);">
+    </div>` : ''}
+  `;
+
+  document.getElementById('view-lista').style.display = 'none';
+  document.getElementById('view-detalle').style.display = 'block';
+}
+
+function field(label, value) {
+  return `<div class="field">
+    <label>${label}</label>
+    <div style="font-size:13px; color:var(--text); padding:8px 0; border-bottom:1px solid var(--border);">${value}</div>
+  </div>`;
+}
+
+function irRegistrarPago(id) {
+  showSection('pago');
+  setTimeout(() => {
+    const sel = document.getElementById('pago-paciente');
+    sel.value = id;
+    updateSaldoPaciente();
+  }, 100);
+}
+
+// ─── FINANCIERO ───────────────────────────────────────────────
+function calcFinanciero(p) {
+  const state = getState();
+  const pagos = state.pagos.filter(x => x.pacienteId === p.id);
+  const pagado = pagos.reduce((s, x) => s + Number(x.monto), 0);
+  const presupuesto = Number(p.presupuesto) || 0;
+  const saldo = Math.max(0, presupuesto - pagado);
+  const pct = presupuesto > 0 ? Math.min(100, Math.round((pagado / presupuesto) * 100)) : 0;
+  const semaforo = pct >= 100 ? 'verde' : pct > 0 ? 'amarillo' : 'rojo';
+  return { pagado, saldo, pct, semaforo };
+}
+
+function formatMoney(n) {
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0);
+}
+
+// ─── GUARDAR PACIENTE ─────────────────────────────────────────
+function guardarPaciente() {
+  const nombre = document.getElementById('np-nombre').value.trim();
+  if (!nombre) { toast('El nombre es obligatorio', 'error'); return; }
+
+  const state = getState();
+  const id = Date.now().toString();
+  const ineInput = document.getElementById('ine-upload');
+  let ineUrl = '';
+
+  const save = (url) => {
+    const paciente = {
+      id,
+      nombre,
+      nacimiento: document.getElementById('np-nacimiento').value,
+      residencia: document.getElementById('np-residencia').value,
+      telefono: document.getElementById('np-telefono').value,
+      correo: document.getElementById('np-correo').value,
+      procedencia: document.getElementById('np-procedencia').value,
+      referido: document.getElementById('np-referido').value,
+      medico: document.getElementById('np-medico').value,
+      fechaConsulta: document.getElementById('np-fecha-consulta').value,
+      tipoConsulta: document.getElementById('np-tipo-consulta').value,
+      motivo: document.getElementById('np-motivo').value,
+      procedimiento: '',
+      presupuesto: null,
+      fechaProc: '',
+      statusPresupuesto: 'consulta',
+      presupuestoPdf: '',
+      presupuestoNombre: '',
+      ineUrl: url,
+      creadoEn: new Date().toISOString()
+    };
+
+    state.pacientes.push(paciente);
+    saveState(state);
+    syncToSheets('paciente', paciente);
+    toast('Paciente guardado correctamente', 'success');
+    showSection('buscar');
+    // Reset form
+    document.querySelectorAll('#section-nuevo input, #section-nuevo select, #section-nuevo textarea').forEach(el => el.value = '');
+    document.getElementById('ine-preview').innerHTML = '';
+  };
+
+  // Read INE as data URL for local preview
+  if (ineInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => save(e.target.result);
+    reader.readAsDataURL(ineInput.files[0]);
+  } else {
+    save('');
+  }
+}
+
+// ─── GUARDAR PAGO ─────────────────────────────────────────────
+function guardarPago() {
+  const pacienteId = document.getElementById('pago-paciente').value;
+  const monto = document.getElementById('pago-monto').value;
+  const tipo = document.getElementById('pago-tipo').value;
+  const medio = document.getElementById('pago-medio').value;
+  const terminal = document.getElementById('pago-terminal').value;
+
+  if (!pacienteId) { toast('Selecciona un paciente', 'error'); return; }
+  if (!monto || monto <= 0) { toast('El monto es obligatorio', 'error'); return; }
+  if (!tipo) { toast('Selecciona el tipo de ingreso', 'error'); return; }
+  if (!medio) { toast('Selecciona el medio de pago', 'error'); return; }
+
+  const esTarjeta = ['TDD','TDC'].includes(medio);
+  const voucher = document.getElementById('voucher-upload');
+  if (esTarjeta && !voucher.files[0]) {
+    toast('El voucher es obligatorio para pagos con tarjeta', 'error');
+    return;
+  }
+
+  const state = getState();
+  const id = Date.now().toString();
+
+  const save = (voucherUrl) => {
+    const pago = {
+      id,
+      pacienteId,
+      fecha: document.getElementById('pago-fecha').value,
+      monto: Number(monto),
+      tipo,
+      medio,
+      terminal,
+      cobrador: document.getElementById('pago-cobrador').value,
+      medicoTitular: document.getElementById('pago-medico-titular').value,
+      factura: document.getElementById('pago-factura').value,
+      obs: document.getElementById('pago-obs').value,
+      voucherUrl,
+      creadoEn: new Date().toISOString()
+    };
+
+    state.pagos.push(pago);
+    saveState(state);
+    syncToSheets('pago', pago);
+
+    const p = state.pacientes.find(x => x.id === pacienteId);
+    toast(`Pago de ${formatMoney(monto)} registrado para ${p?.nombre || 'paciente'}`, 'success');
+
+    // Reset
+    document.querySelectorAll('#section-pago input[type=number], #section-pago input[type=text]').forEach(el => el.value = '');
+    document.getElementById('pago-paciente').value = '';
+    document.getElementById('pago-saldo-info').style.display = 'none';
+    document.getElementById('voucher-preview').innerHTML = '';
+    document.getElementById('voucher-card').style.display = 'none';
+
+    showSection('buscar');
+  };
+
+  if (voucher.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => save(e.target.result);
+    reader.readAsDataURL(voucher.files[0]);
+  } else {
+    save('');
+  }
+}
+
+// ─── POPULATE SELECT ──────────────────────────────────────────
+function populatePacienteSelect() {
+  const state = getState();
+  const sel = document.getElementById('pago-paciente');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Seleccionar paciente…</option>' +
+    state.pacientes.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+function updateSaldoPaciente() {
+  const id = document.getElementById('pago-paciente').value;
+  const state = getState();
+  const p = state.pacientes.find(x => x.id === id);
+  const info = document.getElementById('pago-saldo-info');
+
+  if (!p || !p.presupuesto) { info.style.display = 'none'; return; }
+
+  const { pagado, saldo } = calcFinanciero(p);
+  document.getElementById('pago-presupuesto-val').textContent = formatMoney(p.presupuesto);
+  document.getElementById('pago-pagado-val').textContent = formatMoney(pagado);
+  document.getElementById('pago-saldo-val').textContent = formatMoney(saldo);
+  info.style.display = 'block';
+}
+
+// ─── VOUCHER VISIBILITY ───────────────────────────────────────
+function checkVoucher() {
+  const medio = document.getElementById('pago-medio').value;
+  const card = document.getElementById('voucher-card');
+  card.style.display = ['TDD','TDC'].includes(medio) ? 'block' : 'none';
+}
+
+// ─── FILE PREVIEWS ────────────────────────────────────────────
+function previewINE(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('ine-preview').innerHTML = `
+      <div class="upload-preview">
+        <img src="${e.target.result}" class="upload-thumb">
+        <div class="upload-info">
+          <div class="upload-name">${input.files[0].name}</div>
+          <div class="upload-size">${(input.files[0].size / 1024).toFixed(0)} KB · INE / Pasaporte</div>
+        </div>
+      </div>`;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function previewVoucher(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('voucher-preview').innerHTML = `
+      <div class="upload-preview">
+        <img src="${e.target.result}" class="upload-thumb">
+        <div class="upload-info">
+          <div class="upload-name">${input.files[0].name}</div>
+          <div class="upload-size">${(input.files[0].size / 1024).toFixed(0)} KB · Voucher</div>
+        </div>
+      </div>`;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// ─── CONCILIACIÓN ─────────────────────────────────────────────
+function renderConciliacion() {
+  const fecha = document.getElementById('recon-fecha').value;
+  document.getElementById('recon-fecha-label').textContent =
+    fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : '';
+
+  const state = getState();
+  const pagosHoy = state.pagos.filter(p => p.fecha === fecha);
+  const content = document.getElementById('recon-content');
+
+  if (pagosHoy.length === 0) {
+    content.innerHTML = `<div class="card"><div class="empty-state">
+      <div class="empty-state-icon">📊</div>
+      <div class="empty-state-text">No hay pagos registrados para esta fecha.</div>
+    </div></div>`;
+    return;
+  }
+
+  const total = pagosHoy.reduce((s, p) => s + p.monto, 0);
+
+  // Group by terminal
+  const byTerminal = {};
+  pagosHoy.forEach(p => {
+    const key = p.terminal || 'Sin terminal';
+    if (!byTerminal[key]) byTerminal[key] = [];
+    byTerminal[key].push(p);
+  });
+
+  // Group by medio
+  const byMedio = {};
+  pagosHoy.forEach(p => {
+    const key = p.medio || 'Sin especificar';
+    if (!byMedio[key]) byMedio[key] = [];
+    byMedio[key].push(p);
+  });
+
+  // Group by medico
+  const byMedico = {};
+  pagosHoy.forEach(p => {
+    const key = p.medicoTitular || 'Sin médico';
+    if (!byMedico[key]) byMedico[key] = [];
+    byMedico[key].push(p);
+  });
+
+  const renderGroup = (groups, label) => `
+    <div class="card">
+      <div class="card-title">Por ${label}</div>
+      ${Object.entries(groups).map(([key, items]) => {
+        const subtotal = items.reduce((s, i) => s + i.monto, 0);
+        return `<div class="recon-group">
+          <div class="recon-group-title">${key} — ${formatMoney(subtotal)}</div>
+          ${items.map(i => {
+            const state2 = getState();
+            const pac = state2.pacientes.find(x => x.id === i.pacienteId);
+            return `<div class="recon-row">
+              <div>
+                <div>${pac?.nombre || 'Paciente no encontrado'}</div>
+                <div class="recon-terminal">${i.tipo} · ${i.medio}</div>
+              </div>
+              <div><strong style="color:var(--green);">${formatMoney(i.monto)}</strong></div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+      <div class="recon-total">
+        <div class="recon-total-label">Total ${label}</div>
+        <div class="recon-total-amount">${formatMoney(total)}</div>
+      </div>
+    </div>`;
+
+  content.innerHTML =
+    `<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+      <div class="fin-box" style="border-radius:var(--r);">
+        <div class="fin-label">Total del Día</div>
+        <div class="fin-amount gold">${formatMoney(total)}</div>
+      </div>
+      <div class="fin-box" style="border-radius:var(--r);">
+        <div class="fin-label">Transacciones</div>
+        <div class="fin-amount" style="color:var(--text);">${pagosHoy.length}</div>
+      </div>
+    </div>` +
+    renderGroup(byTerminal, 'Terminal / Banco') +
+    renderGroup(byMedio, 'Medio de Pago') +
+    renderGroup(byMedico, 'Médico Titular');
+}
+
+function cerrarDia() {
+  const fecha = document.getElementById('recon-fecha').value;
+  const state = getState();
+  const pagosHoy = state.pagos.filter(p => p.fecha === fecha);
+  if (pagosHoy.length === 0) { toast('No hay pagos que conciliar', 'error'); return; }
+  toast(`Día ${fecha} marcado como conciliado — ${pagosHoy.length} transacciones`, 'success');
+}
+
+function exportReporte() {
+  const fecha = document.getElementById('recon-fecha').value;
+  const state = getState();
+  const pagosHoy = state.pagos.filter(p => p.fecha === fecha);
+
+  if (pagosHoy.length === 0) { toast('No hay datos para exportar', 'error'); return; }
+
+  const headers = ['Fecha','Paciente','Tipo','Medio','Terminal','Monto','Cobrador','Médico','Factura','Obs'];
+  const rows = pagosHoy.map(p => {
+    const pac = state.pacientes.find(x => x.id === p.pacienteId);
+    return [p.fecha, pac?.nombre||'', p.tipo, p.medio, p.terminal, p.monto, p.cobrador, p.medicoTitular, p.factura, p.obs];
+  });
+
+  const csv = [headers, ...rows].map(r => r.map(c => `"${(c||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Reporte_${fecha}_DrMiguelSoto.csv`;
+  a.click();
+  toast('Reporte exportado correctamente', 'success');
+}
+
+// ─── LIGAR PRESUPUESTO DESDE DRIVE ───────────────────────────
+const COTIZADOR_FOLDER_ID = '1W6LD5Q9mofhAV5qBCzet0MmNLk7E4JyW';
+let driveTokenSistema = null;
+
+function buscarPresupuestoEnDrive(pacienteId) {
+  const state = getState();
+  const p = state.pacientes.find(x => x.id === pacienteId);
+  if (!p) return;
+
+  toast('Conectando con Google Drive…', 'success');
+
+  // Cargar Google Identity Services
+  const initSearch = () => {
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com',
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: (resp) => {
+        if (resp.error) { toast('Error al conectar con Drive', 'error'); return; }
+        driveTokenSistema = resp.access_token;
+        buscarArchivosAceptada(p, pacienteId);
+      }
+    });
+    tokenClient.requestAccessToken({ prompt: driveTokenSistema ? '' : 'consent' });
+  };
+
+  if (driveTokenSistema) {
+    buscarArchivosAceptada(p, pacienteId);
+  } else if (window.google?.accounts) {
+    initSearch();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = initSearch;
+    document.head.appendChild(s);
+  }
+}
+
+async function buscarArchivosAceptada(p, pacienteId) {
+  toast('Buscando presupuesto en Drive…', 'success');
+
+  // Normaliza nombre: quita acentos para búsqueda más flexible
+  const nombreBuscar = p.nombre.split(' ').slice(0, 2).join(' ');
+
+  // Busca en la carpeta Aceptadas del año actual y del anterior
+  const anio = new Date().getFullYear();
+  const carpetas = [`Aceptadas ${anio}`, `Aceptadas ${anio - 1}`];
+
+  let archivoEncontrado = null;
+
+  for (const carpetaNombre of carpetas) {
+    // Buscar subcarpeta
+    const qFolder = `mimeType='application/vnd.google-apps.folder' and name='${carpetaNombre}' and '${COTIZADOR_FOLDER_ID}' in parents and trashed=false`;
+    const rFolder = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qFolder)}&fields=files(id,name)`, {
+      headers: { Authorization: 'Bearer ' + driveTokenSistema }
+    }).then(r => r.json());
+
+    if (!rFolder.files?.length) continue;
+    const folderId = rFolder.files[0].id;
+
+    // Buscar archivo ACEPTADA con nombre del paciente
+    const qFile = `name contains '${nombreBuscar}' and name contains 'ACEPTADA' and '${folderId}' in parents and trashed=false`;
+    const rFile = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qFile)}&fields=files(id,name,webViewLink)&orderBy=createdTime desc`, {
+      headers: { Authorization: 'Bearer ' + driveTokenSistema }
+    }).then(r => r.json());
+
+    if (rFile.files?.length) {
+      archivoEncontrado = rFile.files[0];
+      break;
+    }
+  }
+
+  if (!archivoEncontrado) {
+    toast(`No se encontró presupuesto ACEPTADA para "${p.nombre}" en Drive`, 'error');
+    return;
+  }
+
+  // Extraer monto del nombre — formato: CP-0042 Nombre 16-05-2026 ACEPTADA.pdf
+  // El monto no está en el nombre de archivo, se pide al usuario confirmación
+  const state = getState();
+  const idx = state.pacientes.findIndex(x => x.id === pacienteId);
+
+  // Mostrar modal de confirmación con el archivo encontrado
+  mostrarModalPresupuesto(archivoEncontrado, pacienteId);
+}
+
+function mostrarModalPresupuesto(archivo, pacienteId) {
+  // Crear modal dinámico
+  const existing = document.getElementById('modal-presupuesto');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-presupuesto';
+  modal.className = 'modal-overlay show';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-title">✅ Presupuesto Encontrado</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">Se encontró este archivo en Drive:</div>
+      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:14px; margin-bottom:20px;">
+        <div style="font-size:13px; color:var(--gold); margin-bottom:6px;">📄 ${archivo.name}</div>
+        <a href="${archivo.webViewLink}" target="_blank" style="font-size:11px; color:var(--muted); text-decoration:none;">Ver en Drive →</a>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Monto Total del Presupuesto ($) *</label>
+        <input type="number" id="modal-monto-presupuesto" placeholder="Ej. 85000" min="0" style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:10px 12px; font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text); outline:none; width:100%;">
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Fecha Estimada del Procedimiento</label>
+        <input type="date" id="modal-fecha-proc" style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:10px 12px; font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text); outline:none; width:100%;">
+      </div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-outline" onclick="document.getElementById('modal-presupuesto').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarPresupuesto('${pacienteId}', '${archivo.id}', '${archivo.name}', '${archivo.webViewLink}')">Ligar Presupuesto</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmarPresupuesto(pacienteId, fileId, fileName, fileUrl) {
+  const monto = document.getElementById('modal-monto-presupuesto').value;
+  const fechaProc = document.getElementById('modal-fecha-proc').value;
+
+  if (!monto || monto <= 0) { toast('Ingresa el monto del presupuesto', 'error'); return; }
+
+  const state = getState();
+  const idx = state.pacientes.findIndex(x => x.id === pacienteId);
+  if (idx === -1) return;
+
+  state.pacientes[idx].presupuesto = Number(monto);
+  state.pacientes[idx].fechaProc = fechaProc;
+  state.pacientes[idx].presupuestoPdf = fileUrl;
+  state.pacientes[idx].presupuestoNombre = fileName;
+  state.pacientes[idx].statusPresupuesto = 'aceptado';
+
+  saveState(state);
+  document.getElementById('modal-presupuesto').remove();
+  toast(`Presupuesto de ${formatMoney(monto)} ligado correctamente`, 'success');
+  showDetalle(pacienteId);
+}
+
+// ─── SYNC TO SHEETS ───────────────────────────────────────────
+async function syncToSheets(type, data) {
+  if (!APPS_SCRIPT_URL) return;
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data })
+    });
+  } catch(e) { /* silencioso — datos ya guardados localmente */ }
+}
+
+// ─── TOAST ────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ─── START ────────────────────────────────────────────────────
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
