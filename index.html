@@ -3951,7 +3951,9 @@ function confirmDialog(title, msg, onOk) {
 //  INTEGRACIÓN CON SISTEMA DE COBROS
 //  Al marcar ACEPTADA, escribe a 2 pestañas del Sheet de cobros.
 // ══════════════════════════════════════════════════════
-const COBROS_SHEET_ID = '1BO3SSBab5LzNVKEU85laV3R_j_ax6lu5Grv5j54eySE';
+// ── URL del Apps Script desplegado como Web App (Execute as: Me, Access: Anyone) ──
+// INSTRUCCIONES: después de desplegar CobrosGateway_Code.gs, pegar aquí la URL.
+const COBROS_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbzpbVMN57_fiyrQixPB2HfodayuH8VnQ2ziZOtZM80fWj8xxOG0Om8fsSLKIgnoSLQL/exec';
 
 // Busca un procedimiento por nombre en GH Renasté (costos reales sin honorarios)
 function _findGHRenaste(procName) {
@@ -3972,22 +3974,17 @@ function calcRenasteRealCost(h) {
   var total = 0;
   sel.forEach(function(s, idx) {
     var gh = _findGHRenaste(s.proc.n);
-    if (!gh) return; // procedimiento no encontrado en GH Renasté
+    if (!gh) return;
     var bk = s.breakdown;
     var isFirst = idx === 0;
-    // Tiempo quirúrgico: 100% primera, 50% adicionales
-    if (bk.qx && bk.qx.on)    total += isFirst ? gh.qx : Math.round(gh.qx * 0.5);
-    // Anestesia: base para primera, $1,500 fijo para adicionales
+    if (bk.qx && bk.qx.on)      total += isFirst ? gh.qx : Math.round(gh.qx * 0.5);
     if (bk.anest && bk.anest.on) total += isFirst ? gh.anest : 1500;
-    // Hospitalización
-    if (bk.hosp && bk.hosp.on) total += gh.hosp;
-    // VPO y VPA solo en la primera cirugía
+    if (bk.hosp && bk.hosp.on)   total += gh.hosp;
     if (isFirst && bk.vpo && bk.vpo.on) total += gh.vpo;
     if (isFirst && bk.vpa && bk.vpa.on) total += gh.vpa;
-    // Fajas, implantes, consumibles: montos fijos directos
-    if (bk.faja && bk.faja.on) total += gh.faja;
-    if (bk.impl && bk.impl.on) total += gh.impl;
-    if (bk.cons && bk.cons.on) total += gh.cons;
+    if (bk.faja && bk.faja.on)   total += gh.faja;
+    if (bk.impl && bk.impl.on)   total += gh.impl;
+    if (bk.cons && bk.cons.on)   total += gh.cons;
   });
   return total;
 }
@@ -4002,88 +3999,58 @@ function calcHonorariosTotal(h) {
   return honBruto * (1 - honDisc / 100);
 }
 
-// Escribe a las pestañas Cotizaciones y CotizacionDetalle del Sheet de cobros
+// Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
 async function escribirACobros(h) {
-  if (!driveToken) {
-    console.warn('[Cobros] Sin token OAuth, no se puede escribir.');
+  if (COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
+    console.warn('[Cobros] Gateway URL no configurada.');
+    toast('⚠ Cobros Gateway no configurado — contactar al administrador.', 'error');
     return;
   }
 
-  var cotId        = h.id;
-  var pacId        = h.pacienteId || '';
-  var pacNombre    = h.nombre || '';
-  var fechaAcept   = h.fechaAceptada || new Date().toLocaleDateString('es-MX');
-  var grandTotal   = h.total || 0;
-  var honTotal     = calcHonorariosTotal(h);
-  var renasteReal  = calcRenasteRealCost(h);
-  var vigencia     = new Date().getFullYear().toString();
-  var estado       = 'Aceptada';
-  var folioId      = '';
-  var driveUrl     = h.drive_url || '';
-  var driveFileId  = h.drive_file_id || '';
+  var honDisc = h.descuentoHon || 0;
+  var sel     = h.selected || [];
 
-  // ── 1. Escribir fila en pestaña "Cotizaciones" ──
-  var cotRow = [[
-    cotId, pacId, pacNombre, fechaAcept,
-    grandTotal, honTotal, renasteReal,
-    vigencia, estado, folioId, driveUrl, driveFileId
-  ]];
+  var payload = {
+    cotizacionId:    h.id,
+    pacienteId:      h.pacienteId || '',
+    pacienteNombre:  h.nombre || '',
+    fechaAceptada:   h.fechaAceptada || new Date().toLocaleDateString('es-MX'),
+    granTotal:       h.total || 0,
+    honorariosTotal: calcHonorariosTotal(h),
+    renasteRealCost: calcRenasteRealCost(h),
+    vigencia:        new Date().getFullYear().toString(),
+    estado:          'Aceptada',
+    folioId:         '',
+    driveUrl:        h.drive_url || '',
+    driveFileId:     h.drive_file_id || '',
+    detalle: sel.map(function(s, idx) {
+      var honBruto = s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0;
+      return {
+        procedimiento: s.proc.n,
+        honorarios:    honBruto * (1 - honDisc / 100),
+        esPrincipal:   idx === 0 ? 'Sí' : 'No'
+      };
+    })
+  };
 
   try {
-    var url1 = 'https://sheets.googleapis.com/v4/spreadsheets/'
-      + COBROS_SHEET_ID + '/values/'
-      + encodeURIComponent('Cotizaciones') + ':append'
-      + '?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-    var r1 = await fetch(url1, {
+    var r = await fetch(COBROS_GATEWAY_URL, {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + driveToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ values: cotRow })
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
     });
-    if (!r1.ok) throw new Error('Cotizaciones HTTP ' + r1.status);
-    console.log('[Cobros] Cotización ' + cotId + ' escrita en pestaña Cotizaciones.');
-  } catch(e) {
-    console.error('[Cobros] Error escribiendo Cotizaciones:', e);
-    toast('⚠ No se pudo escribir en Cobros (Cotizaciones): ' + e.message, 'error');
-    return;
-  }
-
-  // ── 2. Escribir filas en pestaña "CotizacionDetalle" ──
-  var sel = h.selected || [];
-  if (sel.length) {
-    var honDisc = h.descuentoHon || 0;
-    var detalleRows = sel.map(function(s, idx) {
-      var honBruto = s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0;
-      var honNeto  = honBruto * (1 - honDisc / 100);
-      var esPrinc  = idx === 0 ? 'Sí' : 'No';
-      return [cotId, s.proc.n, honNeto, esPrinc];
-    });
-
-    try {
-      var url2 = 'https://sheets.googleapis.com/v4/spreadsheets/'
-        + COBROS_SHEET_ID + '/values/'
-        + encodeURIComponent('CotizacionDetalle') + ':append'
-        + '?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-      var r2 = await fetch(url2, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + driveToken,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ values: detalleRows })
-      });
-      if (!r2.ok) throw new Error('CotizacionDetalle HTTP ' + r2.status);
-      console.log('[Cobros] ' + detalleRows.length + ' procedimientos escritos en CotizacionDetalle.');
-    } catch(e) {
-      console.error('[Cobros] Error escribiendo CotizacionDetalle:', e);
-      toast('⚠ No se pudo escribir en Cobros (Detalle): ' + e.message, 'error');
-      return;
+    var result = await r.json();
+    if (result.ok) {
+      console.log('[Cobros] Cotización ' + h.id + ' registrada en Sistema de Cobros.');
+      toast('✓ Cotización registrada en Sistema de Cobros.', 'success');
+    } else {
+      throw new Error(result.error || 'Error desconocido');
     }
+  } catch(e) {
+    console.error('[Cobros] Error:', e);
+    toast('⚠ No se pudo registrar en Cobros: ' + e.message, 'error');
   }
-
-  toast('✓ Cotización registrada en Sistema de Cobros.', 'success');
 }
 
 </script>
