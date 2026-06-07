@@ -2468,7 +2468,7 @@ function generarNombreArchivo(qNum, nombre, fecha) {
   return num + ' ' + nombreLimpio + ' ' + fechaStr;
 }
 
-function saveQuote(){
+async function saveQuote(){
   var nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){toast('Ingresa el nombre del paciente.','error');return;}
   if(!selected.length&&!extras.length&&!moduleItems.length){toast('Agrega al menos un procedimiento.','error');return;}
@@ -2481,8 +2481,22 @@ function saveQuote(){
   var total=(honSub*(1-honDisc/100)+restSub)*(1-disc/100);
   var ahora = new Date();
   var session = (typeof _authGetSession === 'function') ? _authGetSession() : null;
-  // Construir el objeto de cotización SIN el ID — el ID se asigna dentro del updater
-  // a partir del counter recalculado contra Drive (evita colisiones entre usuarios).
+
+  // ── Obtener folio COT del gateway centralizado (atómico, sin duplicados) ──
+  var centralCOT = null;
+  if (COBROS_GATEWAY_URL && COBROS_GATEWAY_URL !== 'PEGAR_URL_DEL_DEPLOY_AQUI') {
+    try {
+      var cotResp = await fetch(COBROS_GATEWAY_URL + '?action=nextCOT', { redirect: 'follow' });
+      var cotData = await cotResp.json();
+      if (cotData.ok && cotData.cotId) {
+        centralCOT = cotData.cotId;
+        console.log('[Folio] Obtenido del gateway:', centralCOT);
+      }
+    } catch(e) {
+      console.warn('[Folio] Gateway no respondió, usando counter local:', e.message);
+    }
+  }
+
   var quoteData = {
     pacienteId:_selectedPatientId||'',
     nombre:nombre,
@@ -2502,15 +2516,18 @@ function saveQuote(){
     version:1,
     createdBy: session ? session.email : 'unknown'
   };
-  // Sync con Drive: el updater agrega la cotización al historial remoto,
-  // pero el ID se asigna en el momento del sync para evitar conflictos.
+
   _historialApplyAndSync(function(currentQuotes){
-    var nextN = _historialRecomputeCounter(currentQuotes);
-    var qNum = 'COT-' + String(nextN).padStart(4,'0');
+    // Usar folio central si existe, sino fallback al counter local
+    var qNum;
+    if (centralCOT) {
+      qNum = centralCOT;
+    } else {
+      var nextN = _historialRecomputeCounter(currentQuotes);
+      qNum = 'COT-' + String(nextN).padStart(4,'0');
+    }
     return [Object.assign({ id: qNum }, quoteData)].concat(currentQuotes);
   }).then(function(){
-    // qHistory ya está actualizado por _historialApplyAndSync.
-    // El primer elemento es el recién creado (lo prepunta el updater).
     var saved = qHistory[0];
     var savedId = saved ? saved.id : 'COT-XXXX';
     toast('Cotización ' + savedId + ' guardada.', 'success');
@@ -2518,7 +2535,6 @@ function saveQuote(){
     // Subir PDF a Drive automáticamente al guardar
     if (driveToken) {
       setTimeout(function(){
-        // Actualizar el número en la vista antes de generar el PDF
         document.getElementById('q-num').textContent = savedId;
         document.getElementById('cot-num').textContent = savedId;
         guardarEnDrive(false);
@@ -3953,7 +3969,7 @@ function confirmDialog(title, msg, onOk) {
 // ══════════════════════════════════════════════════════
 // ── URL del Apps Script desplegado como Web App (Execute as: Me, Access: Anyone) ──
 // INSTRUCCIONES: después de desplegar CobrosGateway_Code.gs, pegar aquí la URL.
-const COBROS_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbzpbVMN57_fiyrQixPB2HfodayuH8VnQ2ziZOtZM80fWj8xxOG0Om8fsSLKIgnoSLQL/exec';
+const COBROS_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbw9vCFgCWsIrsbRRWpl9lpvIRFNv6126d6eIWft0ltjgy1K_sm5RU6VwvW-2G6ITgiG/exec';
 
 // Busca un procedimiento por nombre en GH Renasté (costos reales sin honorarios)
 function _findGHRenaste(procName) {
@@ -3989,6 +4005,24 @@ function calcRenasteRealCost(h) {
   return total;
 }
 
+// Calcula la porción liberable: solo Tiempo Qx (col D) + Hospitalización (col F)
+// de GH Renasté, con las mismas reglas de paquete (1ª al 100%, extras al 50% en qx).
+// Excluye anestesia, VPO, VPA, fajas, implantes y consumibles (llevan IVA proveedor).
+function calcRenasteLiberable(h) {
+  var sel = h.selected || [];
+  if (!sel.length) return 0;
+  var total = 0;
+  sel.forEach(function(s, idx) {
+    var gh = _findGHRenaste(s.proc.n);
+    if (!gh) return;
+    var bk = s.breakdown;
+    var isFirst = idx === 0;
+    if (bk.qx && bk.qx.on)    total += isFirst ? gh.qx : Math.round(gh.qx * 0.5);
+    if (bk.hosp && bk.hosp.on) total += gh.hosp;
+  });
+  return total;
+}
+
 // Calcula el total de honorarios con descuento aplicado
 function calcHonorariosTotal(h) {
   var sel = h.selected || [];
@@ -4018,6 +4052,7 @@ async function escribirACobros(h) {
     granTotal:       h.total || 0,
     honorariosTotal: calcHonorariosTotal(h),
     renasteRealCost: calcRenasteRealCost(h),
+    renasteLiberable: calcRenasteLiberable(h),
     vigencia:        new Date().getFullYear().toString(),
     estado:          'Aceptada',
     folioId:         '',
@@ -4036,11 +4071,17 @@ async function escribirACobros(h) {
   try {
     var r = await fetch(COBROS_GATEWAY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload),
-      redirect: 'follow'
+      body: JSON.stringify(payload)
     });
-    var result = await r.json();
+    console.log('[Cobros] Response status:', r.status, r.statusText);
+    var responseText = await r.text();
+    console.log('[Cobros] Response body:', responseText.substring(0, 500));
+    var result;
+    try {
+      result = JSON.parse(responseText);
+    } catch(parseErr) {
+      throw new Error('Respuesta no es JSON. Status: ' + r.status);
+    }
     if (result.ok) {
       console.log('[Cobros] Cotización ' + h.id + ' registrada en Sistema de Cobros.');
       toast('✓ Cotización registrada en Sistema de Cobros.', 'success');
