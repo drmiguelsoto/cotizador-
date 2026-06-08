@@ -2072,9 +2072,12 @@ function makeProcRow(proc) {
     const idx = selected.findIndex(function(s){return s.proc.n===proc.n;});
     if (idx>=0) {
       selected.splice(idx,1);
+      selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
       selected.forEach(function(s,i){ recalcDiscounts(s,i); });
     } else {
       selected.push({proc:proc, breakdown:makeBreakdown(proc, selected.length), expanded:true});
+      selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
+      selected.forEach(function(s,i){ recalcDiscounts(s,i); });
     }
     buildProcsList();
     renderQuote();
@@ -2408,6 +2411,7 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c
 
 function removeProc(idx) {
   selected.splice(idx,1);
+  selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
   selected.forEach(function(s,i){recalcDiscounts(s,i);});
   buildProcsList();
   renderQuote();
@@ -2637,6 +2641,8 @@ function loadQuote(i){
   document.getElementById('descuento-hon').value=h.descuentoHon||0;
   _selectedPatientId=h.pacienteId||'';
   selected=JSON.parse(JSON.stringify(h.selected||[]));
+  selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
+  selected.forEach(function(s,i){recalcDiscounts(s,i);});
   moduleItems=JSON.parse(JSON.stringify(h.moduleItems||[]));
   extras=JSON.parse(JSON.stringify(h.extras||[]));
   document.getElementById('q-num').textContent=h.id;
