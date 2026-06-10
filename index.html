@@ -2472,10 +2472,16 @@ function generarNombreArchivo(qNum, nombre, fecha) {
   return num + ' ' + nombreLimpio + ' ' + fechaStr;
 }
 
+var _saving = false;
 async function saveQuote(){
+  if (_saving) { toast('Guardando… espera un momento.','info'); return; }
+  _saving = true;
+  var btnGuardar = document.querySelector('button[onclick="saveQuote()"]');
+  if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.style.opacity = '0.5'; }
+
   var nombre=document.getElementById('p-nombre').value.trim();
-  if(!nombre){toast('Ingresa el nombre del paciente.','error');return;}
-  if(!selected.length&&!extras.length&&!moduleItems.length){toast('Agrega al menos un procedimiento.','error');return;}
+  if(!nombre){toast('Ingresa el nombre del paciente.','error'); _saving=false; if(btnGuardar){btnGuardar.disabled=false;btnGuardar.style.opacity='';} return;}
+  if(!selected.length&&!extras.length&&!moduleItems.length){toast('Agrega al menos un procedimiento.','error'); _saving=false; if(btnGuardar){btnGuardar.disabled=false;btnGuardar.style.opacity='';} return;}
   var disc=parseFloat(document.getElementById('descuento').value)||0;
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
   var honSub=0, restSub=0;
@@ -2544,6 +2550,9 @@ async function saveQuote(){
         guardarEnDrive(false);
       }, 300);
     }
+    _saving = false;
+    var btnG = document.querySelector('button[onclick="saveQuote()"]');
+    if (btnG) { btnG.disabled = false; btnG.style.opacity = ''; }
   });
 }
 
