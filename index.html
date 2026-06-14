@@ -4048,6 +4048,33 @@ function calcHonorariosTotal(h) {
   return honBruto * (1 - honDisc / 100);
 }
 
+// Detecta paquetes FZ/PRUC en los moduleItems de la cotización.
+// Regla: items del módulo 'fibrosis' cuyo nombre contiene "5 sesiones" o
+// "10 sesiones" (no "1 sesión") son paquetes con sesiones rastreables.
+// Devuelve [{ tratamiento, totalSesiones, cirugiaPrincipal, qty }].
+function _detectarPaquetesFZ(h) {
+  var items = h.moduleItems || [];
+  var sel   = h.selected || [];
+  var cirugiaPrincipal = (sel.length && sel[0].proc) ? sel[0].proc.n : '';
+  var out = [];
+  items.forEach(function(it) {
+    if (it.module !== 'fibrosis') return;
+    var nombre = String(it.n || '');
+    // Buscar "N sesiones" (plural) — excluye "1 sesión" individual
+    var m = nombre.match(/(\d+)\s*sesiones/i);
+    if (!m) return;
+    var total = parseInt(m[1], 10);
+    if (!total || total < 2) return;
+    out.push({
+      tratamiento:      nombre,
+      totalSesiones:    total,
+      cirugiaPrincipal: cirugiaPrincipal,
+      qty:              Math.max(1, parseInt(it.qty, 10) || 1)
+    });
+  });
+  return out;
+}
+
 // Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
 async function escribirACobros(h) {
   if (COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
@@ -4058,6 +4085,7 @@ async function escribirACobros(h) {
 
   var honDisc = h.descuentoHon || 0;
   var sel     = h.selected || [];
+  var _sess   = (typeof _authGetSession === 'function') ? _authGetSession() : null;
 
   var payload = {
     cotizacionId:    h.id,
@@ -4073,6 +4101,8 @@ async function escribirACobros(h) {
     folioId:         '',
     driveUrl:        h.drive_url || '',
     driveFileId:     h.drive_file_id || '',
+    creadoPor:       _sess ? _sess.email : (h.createdBy || 'unknown'),
+    paquetesFZ:      _detectarPaquetesFZ(h),
     detalle: sel.map(function(s, idx) {
       var honBruto = s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0;
       return {
