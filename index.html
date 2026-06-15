@@ -4140,5 +4140,57 @@ async function escribirACobros(h) {
 }
 
 </script>
+<!-- ============================================================
+     MS UNIVERSE · Barra de navegación entre apps
+     Pega este bloque COMPLETO justo después de <body> en:
+       · agenda.miguelsotomd.com   (index.html del repo de Agenda)
+       · cotizador.miguelsotomd.com (index.html del repo de Cotizador)
+       · cobros.miguelsotomd.com    (index.html del repo de Cobros)
+     Es el MISMO código en las tres. Detecta sola en cuál estás
+     y resalta el botón actual.
+     ============================================================ -->
+<div id="ms-nav">
+  <a data-app="app"       href="https://app.miguelsotomd.com"       class="ms-home" title="Portal">⌂</a>
+  <a data-app="agenda"    href="https://agenda.miguelsotomd.com">Agenda</a>
+  <a data-app="cotizador" href="https://cotizador.miguelsotomd.com">Cotizador</a>
+  <a data-app="cobros"    href="https://cobros.miguelsotomd.com">Cobros</a>
+</div>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap');
+  /* Para mover la barra: cambia bottom/left de aquí abajo.
+     Arriba al centro:  top:16px; bottom:auto;
+     Abajo a la derecha: right:18px; left:auto; transform:none; */
+  #ms-nav{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:99999;
+    display:flex; align-items:center; gap:4px; padding:6px;
+    border-radius:999px; background:rgba(7,9,8,.82);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    border:1px solid rgba(161,148,135,.28); box-shadow:0 12px 32px -12px rgba(0,0,0,.65);
+    font-family:'Jost',-apple-system,system-ui,sans-serif;
+  }
+  #ms-nav a{
+    display:flex; align-items:center; justify-content:center; text-decoration:none;
+    color:#F4F2F1; font-size:13px; font-weight:300; letter-spacing:.1em; text-transform:uppercase;
+    padding:9px 16px; border-radius:999px; transition:background .25s, color .25s; white-space:nowrap;
+  }
+  #ms-nav a.ms-home{ font-size:17px; letter-spacing:0; padding:9px 13px; color:#A19487; }
+  #ms-nav a:hover{ background:rgba(161,148,135,.16); color:#fff; }
+  #ms-nav a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
+  @media (max-width:480px){
+    #ms-nav{ bottom:12px; gap:2px; padding:5px; }
+    #ms-nav a{ padding:8px 11px; font-size:11px; letter-spacing:.04em; }
+  }
+</style>
+
+<script>
+  (function(){
+    var sub = location.hostname.split('.')[0]; // agenda | cotizador | cobros | app
+    document.querySelectorAll('#ms-nav a').forEach(function(a){
+      if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
+    });
+  })();
+</script>
+<!-- ===================== fin barra MS Universe ===================== -->  
 </body>
 </html>
