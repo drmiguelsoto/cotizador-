@@ -2606,13 +2606,17 @@ function renderHistory(){
 var _accepting = false;
 function marcarAceptada(i) {
   if (_accepting) return;
-  _accepting = true;
   var h = qHistory[i];
+  if (!h || h.status === 'aceptada') return;
+  _accepting = true;
   var quoteId = h.id;
   confirmDialog(
     'Marcar como Aceptada',
     '¿' + (h.sexo === 'M' ? 'El paciente ' : 'La paciente ') + h.nombre + ' pagó el anticipo y acepta la cotización ' + h.id + '?',
     function(){
+      // Marcar inmediatamente en local para que el botón desaparezca al re-renderizar
+      h.status = 'aceptada';
+      renderHistory();
       var fechaAceptada = new Date().toLocaleDateString('es-MX');
       _historialApplyAndSync(function(currentQuotes){
         return currentQuotes.map(function(q){
