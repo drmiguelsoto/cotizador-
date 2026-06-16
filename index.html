@@ -3992,8 +3992,27 @@ function confirmDialog(title, msg, onOk, onCancel) {
 //  Al marcar ACEPTADA, escribe a 2 pestañas del Sheet de cobros.
 // ══════════════════════════════════════════════════════
 // ── URL del Apps Script desplegado como Web App (Execute as: Me, Access: Anyone) ──
-// INSTRUCCIONES: después de desplegar CobrosGateway_Code.gs, pegar aquí la URL.
 const COBROS_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbw9vCFgCWsIrsbRRWpl9lpvIRFNv6126d6eIWft0ltjgy1K_sm5RU6VwvW-2G6ITgiG/exec';
+
+// ── Reglas de ownership: ¿el item es del Dr. o de Renasté? ──
+// Retorna true si el ingreso va al Dr., false si va a Renasté.
+function _isItemDr(mod, cat, itemName) {
+  // Inyectables: todo del Dr.
+  if (mod === 'inyectables') return true;
+  // ED + Faciales: depende de la subcategoría/nombre
+  if (mod === 'energy') {
+    var nc = quitarAcentos(cat || '').toLowerCase();
+    var nn = quitarAcentos(itemName || '').toLowerCase();
+    if (nc.indexOf('morpheus') >= 0) return true;
+    if (nc.indexOf('endolifting') >= 0) return true;
+    if (nc.indexOf('ultherapy') >= 0) return true;
+    if (nc.indexOf('estrias') >= 0 || nc.indexOf('cicatrices') >= 0) return true;
+    if (nn.indexOf('skinresurfacing') >= 0 || nn.indexOf('skin resurfacing') >= 0) return true;
+    return false;
+  }
+  // Todo lo demás: Renasté (servicios, fibrosis, medicamentos, anestesia)
+  return false;
+}
 
 // Busca un procedimiento por nombre en GH Renasté (costos reales sin honorarios)
 function _findGHRenaste(procName) {
@@ -4008,10 +4027,11 @@ function _findGHRenaste(procName) {
 
 // Calcula el costo real de Renasté para las cirugías seleccionadas
 // Aplica las mismas reglas de paquete que el cotizador pero con precios GH Renasté
+// Calcula el costo real de Renasté para cirugías + items de módulos que son 100% Renasté
 function calcRenasteRealCost(h) {
   var sel = h.selected || [];
-  if (!sel.length) return 0;
   var total = 0;
+  // Cirugías: lookup en GH Renasté con reglas de paquete
   sel.forEach(function(s, idx) {
     var gh = _findGHRenaste(s.proc.n);
     if (!gh) return;
@@ -4025,6 +4045,16 @@ function calcRenasteRealCost(h) {
     if (bk.faja && bk.faja.on)   total += gh.faja;
     if (bk.impl && bk.impl.on)   total += gh.impl;
     if (bk.cons && bk.cons.on)   total += gh.cons;
+  });
+  // Items de módulos que son 100% Renasté (precio = costo real)
+  (h.moduleItems || []).forEach(function(it) {
+    if (!_isItemDr(it.module, it.cat, it.n)) {
+      total += (it.precio || 0) * (it.qty || 1);
+    }
+  });
+  // Extras (conceptos adicionales) → se tratan como Renasté
+  (h.extras || []).forEach(function(e) {
+    total += e.p || 0;
   });
   return total;
 }
@@ -4048,13 +4078,26 @@ function calcRenasteLiberable(h) {
 }
 
 // Calcula el total de honorarios con descuento aplicado
+// Incluye: honorarios de cirugías + items de módulos que son 100% del Dr.
 function calcHonorariosTotal(h) {
   var sel = h.selected || [];
   var honDisc = h.descuentoHon || 0;
+  // Honorarios de cirugías (con descuento de honorarios)
   var honBruto = sel.reduce(function(sum, s) {
     return sum + (s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0);
   }, 0);
-  return honBruto * (1 - honDisc / 100);
+  var honCirugias = honBruto * (1 - honDisc / 100);
+  // Items de módulos que son 100% del Dr. (descuento general, no de honorarios)
+  var disc = h.descuento || 0;
+  var honModulos = (h.moduleItems || []).reduce(function(sum, it) {
+    if (_isItemDr(it.module, it.cat, it.n)) {
+      return sum + (it.precio || 0) * (it.qty || 1);
+    }
+    return sum;
+  }, 0);
+  // El descuento general se aplica al total, pero los honorarios de módulos ya están en el gran total
+  // con descuento aplicado. Aquí reportamos el monto bruto antes de descuento general.
+  return honCirugias + honModulos;
 }
 
 // Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
@@ -4068,12 +4111,16 @@ async function escribirACobros(h) {
   var honDisc = h.descuentoHon || 0;
   var sel     = h.selected || [];
 
-  // ── DEBUG: diagnosticar valores 0 ──
-  console.log('[Cobros] Quote:', h.id, '| selected:', sel.length, '| moduleItems:', (h.moduleItems||[]).length);
+  // ── DEBUG: diagnosticar valores ──
+  console.log('[Cobros] Quote:', h.id, '| selected:', sel.length, '| moduleItems:', (h.moduleItems||[]).length, '| extras:', (h.extras||[]).length);
   console.log('[Cobros] GH Renasté cargado:', !!(window.MS_PRICES && window.MS_PRICES.gh_renaste), '| items:', window.MS_PRICES && window.MS_PRICES.gh_renaste ? window.MS_PRICES.gh_renaste.length : 0);
   sel.forEach(function(s, idx) {
     var gh = _findGHRenaste(s.proc.n);
-    console.log('[Cobros] Proc[' + idx + ']:', s.proc.n, '| hon.v:', s.breakdown.hon ? s.breakdown.hon.v : 'N/A', '| hon.on:', s.breakdown.hon ? s.breakdown.hon.on : 'N/A', '| GH match:', gh ? 'SÍ (qx=' + gh.qx + ' anest=' + gh.anest + ')' : 'NO');
+    console.log('[Cobros] Proc[' + idx + ']:', s.proc.n, '| hon.v:', s.breakdown.hon ? s.breakdown.hon.v : 'N/A', '| GH match:', gh ? 'SÍ' : 'NO');
+  });
+  (h.moduleItems||[]).forEach(function(it, idx) {
+    var esDr = _isItemDr(it.module, it.cat, it.n);
+    console.log('[Cobros] ModItem[' + idx + ']:', it.n, '| módulo:', it.module, '| cat:', it.cat, '| $' + ((it.precio||0)*(it.qty||1)), '| →', esDr ? 'DR' : 'RENASTÉ');
   });
   var _honTotal = calcHonorariosTotal(h);
   var _renasteReal = calcRenasteRealCost(h);
@@ -4132,65 +4179,68 @@ async function escribirACobros(h) {
 
 </script>
   <!-- ============================================================
-     MS UNIVERSE · Lanzador minimalista entre apps
-     Pega este bloque COMPLETO justo antes de </body> en:
-       agenda · cotizador · cobros  (el mismo código en las tres)
+     MS UNIVERSE · Lanzador entre apps (versión robusta)
+     Abre/cierra con CSS puro: ningún script de la app interfiere.
+     Pega el bloque COMPLETO justo antes de </body> en:
+       agenda · cotizador · cobros   (el mismo código en las tres)
      Por defecto es solo un círculo "MS" en la esquina.
-     Al tocarlo se abre el menú; al tocar fuera se cierra.
-     Detecta sola en cuál app estás y la marca.
+     Tócalo para abrir el menú; tócalo de nuevo para cerrar.
      ============================================================ -->
 <div id="ms-switch">
+  <input type="checkbox" id="ms-toggle" hidden>
   <div class="ms-menu">
     <a data-app="app"       href="https://app.miguelsotomd.com">Portal</a>
     <a data-app="agenda"    href="https://agenda.miguelsotomd.com">Agenda</a>
     <a data-app="cotizador" href="https://cotizador.miguelsotomd.com">Cotizador</a>
     <a data-app="cobros"    href="https://cobros.miguelsotomd.com">Cobros</a>
   </div>
-  <button class="ms-trigger" type="button" aria-label="Cambiar de app">
-    <span class="ms-mark">MS</span>
-  </button>
+  <label for="ms-toggle" class="ms-trigger" aria-label="Cambiar de app"><span>MS</span></label>
 </div>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap');
-  /* Posición: por defecto abajo-derecha. Para moverlo cambia bottom/right.
-     Abajo-izquierda: left:20px; right:auto;  Arriba-derecha: top:20px; bottom:auto; */
-  #ms-switch{ position:fixed; bottom:20px; right:20px; z-index:99999;
-    font-family:'Jost',-apple-system,system-ui,sans-serif; display:flex;
-    flex-direction:column; align-items:flex-end; gap:10px; }
+  /* Posición: cambia bottom/right. Izquierda: left:20px;right:auto */
+  #ms-switch{ position:fixed; bottom:20px; right:20px; z-index:2147483000;
+    display:flex; flex-direction:column; align-items:flex-end; gap:10px;
+    font-family:'Jost',-apple-system,system-ui,sans-serif; -webkit-tap-highlight-color:transparent; }
 
-  .ms-trigger{ width:48px; height:48px; border-radius:50%; cursor:pointer;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.35);
+  #ms-switch .ms-trigger{ width:48px; height:48px; border-radius:50%; cursor:pointer;
+    background:rgba(7,9,8,.9); border:1px solid rgba(161,148,135,.35);
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 10px 28px -10px rgba(0,0,0,.6); transition:transform .3s, border-color .3s;
-    display:flex; align-items:center; justify-content:center; padding:0; }
-  .ms-trigger:hover{ border-color:rgba(161,148,135,.7); }
-  .ms-mark{ font-size:15px; font-weight:400; letter-spacing:.12em; color:#F4F2F1; }
-  #ms-switch.open .ms-trigger{ transform:rotate(90deg); border-color:#A19487; }
+    box-shadow:0 10px 28px -10px rgba(0,0,0,.6);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .3s, border-color .3s; user-select:none; }
+  #ms-switch .ms-trigger span{ font-size:15px; font-weight:400; letter-spacing:.12em; color:#F4F2F1; }
+  #ms-switch .ms-trigger:hover{ border-color:rgba(161,148,135,.7); }
+  #ms-switch #ms-toggle:checked ~ .ms-trigger{ transform:rotate(90deg); border-color:#A19487; }
 
-  .ms-menu{ display:flex; flex-direction:column; align-items:flex-end; gap:7px;
+  #ms-switch .ms-menu{ display:flex; flex-direction:column; align-items:flex-end; gap:7px;
     opacity:0; pointer-events:none; transform:translateY(8px); transition:opacity .28s, transform .28s; }
-  #ms-switch.open .ms-menu{ opacity:1; pointer-events:auto; transform:translateY(0); }
-  .ms-menu a{ text-decoration:none; color:#F4F2F1; font-size:12.5px; font-weight:300;
+  #ms-switch #ms-toggle:checked ~ .ms-menu{ opacity:1; pointer-events:auto; transform:translateY(0); }
+  #ms-switch .ms-menu a{ text-decoration:none; color:#F4F2F1; font-size:12.5px; font-weight:300;
     letter-spacing:.14em; text-transform:uppercase; padding:9px 16px; border-radius:999px;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.22);
+    background:rgba(7,9,8,.9); border:1px solid rgba(161,148,135,.22);
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
     box-shadow:0 8px 22px -12px rgba(0,0,0,.6); white-space:nowrap; transition:background .25s,color .25s; }
-  .ms-menu a:hover{ background:rgba(161,148,135,.18); color:#fff; }
-  .ms-menu a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
+  #ms-switch .ms-menu a:hover{ background:rgba(161,148,135,.18); color:#fff; }
+  #ms-switch .ms-menu a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
 </style>
 
 <script>
-  (function(){
-    var box = document.getElementById('ms-switch');
-    var trigger = box.querySelector('.ms-trigger');
-    var sub = location.hostname.split('.')[0]; // agenda | cotizador | cobros | app
-    box.querySelectorAll('.ms-menu a').forEach(function(a){
-      if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
-    });
-    trigger.addEventListener('click', function(e){ e.stopPropagation(); box.classList.toggle('open'); });
-    document.addEventListener('click', function(){ box.classList.remove('open'); });
-  })();
+  /* Único JS: marcar la app actual y cerrar al tocar fuera.
+     Si fallara, el abrir/cerrar y los enlaces siguen funcionando (son CSS puro). */
+  try{
+    (function(){
+      var box = document.getElementById('ms-switch');
+      var sub = location.hostname.split('.')[0];
+      box.querySelectorAll('.ms-menu a').forEach(function(a){
+        if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
+      });
+      document.addEventListener('click', function(e){
+        if (!box.contains(e.target)) document.getElementById('ms-toggle').checked = false;
+      });
+    })();
+  }catch(e){}
 </script>
 <!-- ===================== fin lanzador MS Universe ===================== -->
 </body>
