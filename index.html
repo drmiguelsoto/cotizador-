@@ -4101,6 +4101,31 @@ function calcHonorariosTotal(h) {
 }
 
 // Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
+  // Detecta paquetes de sesiones (Fibrosis Zero / PRUC) en los items de módulo
+// y los emite para que el gateway los cree al aceptar la cotización.
+function _detectarPaquetesFZ(h) {
+  var out = [];
+  var mods = (h && h.moduleItems) || [];
+  var cirugiaPrincipal = (h && h.selected && h.selected[0] && h.selected[0].proc)
+    ? h.selected[0].proc.n : '';
+  mods.forEach(function(it){
+    if (!it || it.module !== 'fibrosis') return;
+    var nombre = String(it.n || '');
+    var m = nombre.match(/(\d+)\s*sesion/i);
+    if (!m) return;
+    var totalSesiones = parseInt(m[1], 10);
+    if (!totalSesiones || totalSesiones < 2) return;
+    var qty = Math.max(1, parseInt(it.qty, 10) || 1);
+    for (var k = 0; k < qty; k++) {
+      out.push({
+        tratamiento:      nombre,
+        totalSesiones:    totalSesiones,
+        cirugiaPrincipal: cirugiaPrincipal
+      });
+    }
+  });
+  return out;
+}
 async function escribirACobros(h) {
   if (COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
     console.warn('[Cobros] Gateway URL no configurada.');
@@ -4131,6 +4156,8 @@ async function escribirACobros(h) {
     cotizacionId:    h.id,
     pacienteId:      h.pacienteId || '',
     pacienteNombre:  h.nombre || '',
+    paquetesFZ:      _detectarPaquetesFZ(h),
+    creadoPor:       (typeof _authGetSession === 'function' && _authGetSession()) ? _authGetSession().email : (h.createdBy || ''),
     fechaAceptada:   h.fechaAceptada || new Date().toLocaleDateString('es-MX'),
     granTotal:       h.total || 0,
     honorariosTotal: _honTotal,
