@@ -2670,12 +2670,37 @@ function loadQuote(i){
   if(window.innerWidth<=980) toggleSidebar(false);
 }
 
-function delQuote(i){
+// Pide al gateway cancelar el/los paquete(s) ligados a una cotización.
+function _cancelarPaqueteGateway(cotId) {
+  if (!cotId || !COBROS_GATEWAY_URL || COBROS_GATEWAY_URL.indexOf('PEGAR') >= 0) return;
+  try {
+    fetch(COBROS_GATEWAY_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'eliminarPaquete', cotizacionId: cotId })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (res && res.ok) {
+        if (res.cancelados && res.cancelados.length) {
+          console.log('[Cobros] Paquete(s) cancelado(s):', res.cancelados.join(', '));
+          toast('Paquete eliminado del registro de Cobros.', 'success');
+        }
+        if (res.omitidos && res.omitidos.length) {
+          console.warn('[Cobros] Paquete(s) NO cancelados:', res.omitidos);
+          toast('Un paquete no se borro (tiene cobros o sesiones).', 'info');
+        }
+      }
+    })
+    .catch(function(e){ console.warn('[Cobros] No se pudo cancelar el paquete:', e); });
+  } catch(e) { console.warn('[Cobros] Error llamando al gateway:', e); }
+}
+  function delQuote(i){
   var h = qHistory[i];
   if (!h) return;
   var quoteId = h.id;
   confirmDialog('Eliminar cotización', '¿Seguro que deseas eliminar "' + quoteId + ' — ' + h.nombre + '"? Los PDFs se moverán a la carpeta Eliminadas.', function(){
 
+    _cancelarPaqueteGateway(quoteId);
     function _doEliminarHistorial(){
       _historialApplyAndSync(function(currentQuotes){
         return currentQuotes.filter(function(q){ return q.id !== quoteId; });
