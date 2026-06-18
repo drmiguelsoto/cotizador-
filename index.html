@@ -740,6 +740,25 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
       <input type="number" id="descuento" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
     <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">El descuento a honorarios se aplica primero. El descuento general se aplica al total después.</div>
+
+    <!-- Precio Objetivo -->
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+      <label style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;display:block;margin-bottom:8px">PRECIO OBJETIVO</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:13px;color:var(--soft)">$</span>
+        <input type="number" id="precio-objetivo" min="0" placeholder="Monto deseado" oninput="_poFeedbackClear()"
+          style="flex:1;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button type="button" id="po-mode-global" onclick="setPoMode('global')"
+          style="flex:1;border:1px solid var(--stone);background:var(--stone);color:#fff;border-radius:var(--r);padding:6px 4px;font-size:9.5px;letter-spacing:.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">Total global</button>
+        <button type="button" id="po-mode-hon" onclick="setPoMode('hon')"
+          style="flex:1;border:1px solid var(--border);background:transparent;color:var(--mid);border-radius:var(--r);padding:6px 4px;font-size:9.5px;letter-spacing:.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s">Solo honorarios</button>
+      </div>
+      <button type="button" onclick="aplicarPrecioObjetivo()"
+        style="width:100%;background:var(--black);color:var(--white);border:none;border-radius:var(--r);padding:8px;font-size:10px;letter-spacing:1.5px;font-weight:600;cursor:pointer;font-family:inherit">CALCULAR DESCUENTO</button>
+      <div id="po-feedback" style="font-size:9.5px;margin-top:8px;line-height:1.45;display:none"></div>
+    </div>
   </div>
 
 </aside>
@@ -817,7 +836,7 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
   <div class="hist-panel">
     <div class="sec-lbl" style="margin-bottom:8px"><span>Cotizaciones Guardadas</span><span class="lbl-count" id="hist-count"></span></div>
     <div style="margin-bottom:8px">
-      <input type="text" id="hist-search" placeholder="🔍 Buscar por nombre o código..." oninput="histSearch=this.value;renderHistory()" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-size:11px;font-family:inherit;background:var(--cream);color:var(--black)">
+      <input type="text" id="hist-search" placeholder="🔍 Buscar por nombre o código..." onfocus="cargarEstadosPago()" oninput="histSearch=this.value;renderHistory()" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-size:11px;font-family:inherit;background:var(--cream);color:var(--black)">
     </div>
     <div id="history-list"><div class="no-hist">No hay cotizaciones guardadas aún.</div></div>
   </div>
@@ -1700,6 +1719,7 @@ async function _historialSyncFromDrive() {
     if (typeof updateQNum    === 'function') updateQNum();
     _historialSetMode('online');
     console.log('[Historial] Cargado desde Drive:', qHistory.length, 'cotizaciones, counter=' + qCounter);
+    if (typeof cargarEstadosPago === 'function') cargarEstadosPago();
   } catch (err) {
     console.warn('[Historial] Error sincronizando desde Drive:', err);
     _historialSetMode('offline', 'Sin conexión');
@@ -1794,6 +1814,9 @@ function _historialReconnectDrive() {
 // el usuario haga click en Guardar/Email/Drive (donde sí hay user gesture).
 function _historialBootstrap() {
   _historialSetMode('init', 'Conectar Drive');
+  // El estado de pago vive en el Sheet de cobros (no depende de Drive del cotizador),
+  // así que se carga aparte para que los badges aparezcan aun sin sync de Drive.
+  if (typeof cargarEstadosPago === 'function') cargarEstadosPago();
   _historialEnsureDriveToken(function(err, token) {
     if (err || !token) {
       console.log('[Historial] Sin token silencioso. Esperando user gesture.');
@@ -2118,6 +2141,92 @@ function updateSelCount() {
 }
 
 // ── RENDER QUOTE ──
+// ── PRECIO OBJETIVO ──
+// Modo: 'global' (descuenta el total) | 'hon' (descuenta solo honorarios médicos)
+var _poMode = 'global';
+
+function setPoMode(m){
+  _poMode = m;
+  var defs = { global: document.getElementById('po-mode-global'), hon: document.getElementById('po-mode-hon') };
+  Object.keys(defs).forEach(function(k){
+    var btn = defs[k]; if(!btn) return;
+    var on = (k === m);
+    btn.style.background  = on ? 'var(--stone)' : 'transparent';
+    btn.style.color       = on ? '#fff' : 'var(--mid)';
+    btn.style.borderColor = on ? 'var(--stone)' : 'var(--border)';
+    btn.style.fontWeight  = on ? '600' : '500';
+  });
+}
+
+function _poFeedbackClear(){
+  var f = document.getElementById('po-feedback');
+  if(f){ f.style.display = 'none'; f.innerHTML = ''; }
+}
+
+// Totales actuales sin descuento (misma base que saveQuote/updateSelBar):
+//   hon  = honorarios médicos brutos de cirugías
+//   rest = gastos de hospital + extras + items de módulos (precio*cantidad)
+//   bruto = hon + rest  (gran total sin descuentos)
+function _objTotals(){
+  var honSub = 0, restSub = 0;
+  selected.forEach(function(s){
+    Object.keys(s.breakdown).forEach(function(k){
+      if(s.breakdown[k].on){ if(k === 'hon') honSub += s.breakdown[k].v; else restSub += s.breakdown[k].v; }
+    });
+  });
+  restSub += extras.reduce(function(a,e){ return a + (e.p || 0); }, 0);
+  restSub += moduleItems.reduce(function(a,it){ return a + (it.precio || 0) * (it.qty || 1); }, 0);
+  return { hon: honSub, rest: restSub, bruto: honSub + restSub };
+}
+
+function aplicarPrecioObjetivo(){
+  var f = document.getElementById('po-feedback');
+  function show(msg, kind){
+    if(!f) return;
+    var color = kind === 'error' ? 'var(--red)' : (kind === 'warn' ? '#b8860b' : 'var(--green)');
+    f.style.display = 'block'; f.style.color = color; f.innerHTML = msg;
+  }
+
+  if(!selected.length && !extras.length && !moduleItems.length){ show('Agrega procedimientos primero.','error'); return; }
+  var target = parseFloat(document.getElementById('precio-objetivo').value);
+  if(isNaN(target) || target <= 0){ show('Escribe un monto objetivo válido.','error'); return; }
+
+  var t = _objTotals();
+  if(t.bruto <= 0){ show('No hay monto sobre el cual calcular.','error'); return; }
+
+  // El objetivo iguala o supera el precio sin descuento → no hay descuento que aplicar.
+  if(target >= t.bruto){
+    document.getElementById('descuento').value = 0;
+    document.getElementById('descuento-hon').value = 0;
+    renderQuote();
+    show('El objetivo ('+fmt(target)+') es ≥ al precio sin descuento ('+fmt(t.bruto)+'). No se aplicó descuento.','warn');
+    return;
+  }
+
+  if(_poMode === 'hon'){
+    if(t.hon <= 0){ show('Esta cotización no tiene honorarios médicos para descontar. Usa «Total global».','warn'); return; }
+    if(target < t.rest){
+      show('No alcanzable solo con honorarios: aun descontando el 100% de honorarios el mínimo es '+fmt(t.rest)+' (gastos de hospital, módulos y extras). Usa «Total global» o sube el objetivo.','warn');
+      return;
+    }
+    var h = (1 - (target - t.rest) / t.hon) * 100;
+    h = Math.max(0, Math.min(100, Math.round(h * 100) / 100));
+    document.getElementById('descuento-hon').value = h;
+    document.getElementById('descuento').value = 0;
+    renderQuote();
+    var real = t.hon * (1 - h / 100) + t.rest;
+    show('Descuento a honorarios: <b>'+h+'%</b><br>Total resultante: <b>'+fmt(real)+'</b>' + (Math.abs(real - target) >= 1 ? ' <span style="color:var(--soft)">(≈ objetivo, ajustado al 0.01%)</span>' : ''),'ok');
+  } else {
+    var d = (1 - target / t.bruto) * 100;
+    d = Math.max(0, Math.min(100, Math.round(d * 100) / 100));
+    document.getElementById('descuento').value = d;
+    document.getElementById('descuento-hon').value = 0;
+    renderQuote();
+    var real2 = t.bruto * (1 - d / 100);
+    show('Descuento general: <b>'+d+'%</b><br>Total resultante: <b>'+fmt(real2)+'</b>' + (Math.abs(real2 - target) >= 1 ? ' <span style="color:var(--soft)">(≈ objetivo, ajustado al 0.01%)</span>' : ''),'ok');
+  }
+}
+
 function renderQuote() {
   const body = document.getElementById('quote-body');
   const disc = parseFloat(document.getElementById('descuento').value)||0;
@@ -2581,12 +2690,19 @@ function renderHistory(){
     var statusBadge = esAceptada
       ? '<span style="font-size:8px;letter-spacing:1px;background:#0f9d58;color:#fff;padding:2px 7px;border-radius:2px;margin-left:6px">ACEPTADA</span>'
       : '<span style="font-size:8px;letter-spacing:1px;background:var(--border);color:var(--mid);padding:2px 7px;border-radius:2px;margin-left:6px">BORRADOR</span>';
+    var payBadge = '';
+    if (esAceptada) {
+      var _ep = (_estadosPago && _estadosPago[h.id]) ? _estadosPago[h.id] : null;
+      var _pb = _payBadgeStyle(_ep ? _ep.estadoPago : 'Pendiente');
+      var _tip = _ep && _ep.montoPagado ? 'Pagado: ' + fmt(_ep.montoPagado) + (_ep.fechaPago ? ' · ' + _ep.fechaPago : '') : 'Sin pagos registrados';
+      payBadge = '<span title="' + _tip + '" style="font-size:8px;letter-spacing:1px;background:' + _pb.bg + ';color:' + _pb.color + ';padding:2px 7px;border-radius:2px;margin-left:6px;border:1px solid ' + (_pb.bg === 'var(--cream)' ? 'var(--border)' : _pb.bg) + '">' + _pb.label + '</span>';
+    }
     var aceptarBtn = !esAceptada
       ? '<div class="del-hist" style="color:#0f9d58" onclick="event.stopPropagation();marcarAceptada('+i+')">✓ aceptar</div>'
       : '<div class="del-hist" style="color:#0f9d58">✓ aceptada</div>';
     return '<div class="hist-item">'+
       '<div style="flex:1;cursor:pointer;min-width:0" onclick="loadQuote('+i+')">'+
-        '<div class="h-name">'+h.nombre+statusBadge+'</div>'+
+        '<div class="h-name">'+h.nombre+statusBadge+payBadge+'</div>'+
         '<div class="h-meta">'+h.id+' · '+h.fecha+' · '+(h.selected?h.selected.length:0)+' proc.</div>'+
       '</div>'+
       '<div style="text-align:right;flex-shrink:0">'+
@@ -2639,6 +2755,8 @@ function marcarAceptada(i) {
               var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
               if (quoteData) escribirACobros(quoteData);
             }, 2000);
+            // Refrescar badges de estado de pago (la cotización entra como "Pendiente")
+            setTimeout(function(){ if (typeof cargarEstadosPago === 'function') cargarEstadosPago(); }, 3500);
           }
         }
         _accepting = false;
@@ -4002,6 +4120,38 @@ function confirmDialog(title, msg, onOk, onCancel) {
 // ── URL del Apps Script desplegado como Web App (Execute as: Me, Access: Anyone) ──
 const COBROS_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbw9vCFgCWsIrsbRRWpl9lpvIRFNv6126d6eIWft0ltjgy1K_sm5RU6VwvW-2G6ITgiG/exec';
 
+// ── ESTADO DE PAGO (Feature 2) ──
+// Mapa { 'COT-0001': {estadoPago, montoPagado, granTotal, fechaPago} } leído del gateway.
+// Lo alimenta Sistema Cobros vía POST action=actualizarEstadoPago cuando registra un pago.
+var _estadosPago = {};
+var _estadosPagoFetching = false;
+
+async function cargarEstadosPago(){
+  if (!COBROS_GATEWAY_URL || COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') return;
+  if (_estadosPagoFetching) return;
+  _estadosPagoFetching = true;
+  try {
+    var r = await fetch(COBROS_GATEWAY_URL + '?action=estadoCotizaciones', { redirect: 'follow' });
+    var data = await r.json();
+    if (data && data.ok && data.estados) {
+      _estadosPago = data.estados;
+      if (typeof renderHistory === 'function') renderHistory();
+    }
+  } catch (e) {
+    console.warn('[EstadoPago] No se pudo cargar:', e.message);
+  } finally {
+    _estadosPagoFetching = false;
+  }
+}
+
+// Devuelve estilo/etiqueta de badge según el estado de pago.
+function _payBadgeStyle(estado){
+  var e = quitarAcentos(String(estado || '')).toLowerCase();
+  if (e.indexOf('liquidad') >= 0)                          return { label: 'LIQUIDADA', bg: '#0f9d58', color: '#fff' };
+  if (e.indexOf('anticipo') >= 0 || e.indexOf('parcial') >= 0) return { label: 'ANTICIPO', bg: '#2f6fb3', color: '#fff' };
+  return { label: 'PAGO PEND.', bg: 'var(--cream)', color: 'var(--mid)' };
+}
+
 // ── Reglas de ownership: ¿el item es del Dr. o de Renasté? ──
 // Retorna true si el ingreso va al Dr., false si va a Renasté.
 function _isItemDr(mod, cat, itemName) {
@@ -4186,70 +4336,5 @@ async function escribirACobros(h) {
 }
 
 </script>
-  <!-- ============================================================
-     MS UNIVERSE · Lanzador entre apps (versión robusta)
-     Abre/cierra con CSS puro: ningún script de la app interfiere.
-     Pega el bloque COMPLETO justo antes de </body> en:
-       agenda · cotizador · cobros   (el mismo código en las tres)
-     Por defecto es solo un círculo "MS" en la esquina.
-     Tócalo para abrir el menú; tócalo de nuevo para cerrar.
-     ============================================================ -->
-<div id="ms-switch">
-  <input type="checkbox" id="ms-toggle" hidden>
-  <div class="ms-menu">
-    <a data-app="app"       href="https://app.miguelsotomd.com">Portal</a>
-    <a data-app="agenda"    href="https://agenda.miguelsotomd.com">Agenda</a>
-    <a data-app="cotizador" href="https://cotizador.miguelsotomd.com">Cotizador</a>
-    <a data-app="cobros"    href="https://cobros.miguelsotomd.com">Cobros</a>
-  </div>
-  <label for="ms-toggle" class="ms-trigger" aria-label="Cambiar de app"><span>MS</span></label>
-</div>
-
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap');
-  /* Posición: cambia bottom/right. Izquierda: left:20px;right:auto */
-  #ms-switch{ position:fixed; bottom:20px; right:20px; z-index:2147483000;
-    display:flex; flex-direction:column; align-items:flex-end; gap:10px;
-    font-family:'Jost',-apple-system,system-ui,sans-serif; -webkit-tap-highlight-color:transparent; }
-
-  #ms-switch .ms-trigger{ width:48px; height:48px; border-radius:50%; cursor:pointer;
-    background:rgba(7,9,8,.9); border:1px solid rgba(161,148,135,.35);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 10px 28px -10px rgba(0,0,0,.6);
-    display:flex; align-items:center; justify-content:center;
-    transition:transform .3s, border-color .3s; user-select:none; }
-  #ms-switch .ms-trigger span{ font-size:15px; font-weight:400; letter-spacing:.12em; color:#F4F2F1; }
-  #ms-switch .ms-trigger:hover{ border-color:rgba(161,148,135,.7); }
-  #ms-switch #ms-toggle:checked ~ .ms-trigger{ transform:rotate(90deg); border-color:#A19487; }
-
-  #ms-switch .ms-menu{ display:flex; flex-direction:column; align-items:flex-end; gap:7px;
-    opacity:0; pointer-events:none; transform:translateY(8px); transition:opacity .28s, transform .28s; }
-  #ms-switch #ms-toggle:checked ~ .ms-menu{ opacity:1; pointer-events:auto; transform:translateY(0); }
-  #ms-switch .ms-menu a{ text-decoration:none; color:#F4F2F1; font-size:12.5px; font-weight:300;
-    letter-spacing:.14em; text-transform:uppercase; padding:9px 16px; border-radius:999px;
-    background:rgba(7,9,8,.9); border:1px solid rgba(161,148,135,.22);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 8px 22px -12px rgba(0,0,0,.6); white-space:nowrap; transition:background .25s,color .25s; }
-  #ms-switch .ms-menu a:hover{ background:rgba(161,148,135,.18); color:#fff; }
-  #ms-switch .ms-menu a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
-</style>
-
-<script>
-  /* Único JS: marcar la app actual y cerrar al tocar fuera.
-     Si fallara, el abrir/cerrar y los enlaces siguen funcionando (son CSS puro). */
-  try{
-    (function(){
-      var box = document.getElementById('ms-switch');
-      var sub = location.hostname.split('.')[0];
-      box.querySelectorAll('.ms-menu a').forEach(function(a){
-        if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
-      });
-      document.addEventListener('click', function(e){
-        if (!box.contains(e.target)) document.getElementById('ms-toggle').checked = false;
-      });
-    })();
-  }catch(e){}
-</script>
-<!-- ===================== fin lanzador MS Universe ===================== -->
 </body>
 </html>
