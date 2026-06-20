@@ -2633,8 +2633,20 @@ async function saveQuote(){
     }
   }
 
+  // Resolver PacienteId por nombre si no se eligió desde la base (evita cotizaciones sin ID).
+  var _pacIdResuelto = _selectedPatientId || '';
+  if (!_pacIdResuelto) {
+    try {
+      var _bd = await _bdLoad();
+      if (_bd) {
+        var _nrm = _bdNorm(nombre);
+        var _hit = _bd.filter(function(p){ return _bdNorm(p.nombre) === _nrm; });
+        if (_hit.length === 1) _pacIdResuelto = _hit[0].id || '';
+      }
+    } catch(e) {}
+  }
   var quoteData = {
-    pacienteId:_selectedPatientId||'',
+    pacienteId:_pacIdResuelto,
     nombre:nombre,
     fnac:document.getElementById('p-fnac').value,
     sexo:_pacGenero(),
@@ -2877,7 +2889,7 @@ function delQuote(i){
 
 function resetForm(){
   confirmDialog('Nueva cotización', '¿Iniciar una nueva cotización? Se perderán los datos no guardados.', function(){
-    selected=[];moduleItems=[];extras=[];
+    selected=[];moduleItems=[];extras=[];pacSearchClear();
     ['p-nombre','p-fnac','p-tel','p-email','notas'].forEach(function(id){document.getElementById(id).value='';});
     document.getElementById('p-sexo').value='F';
     document.getElementById('descuento').value=0;
