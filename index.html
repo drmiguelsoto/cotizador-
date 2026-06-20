@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- COTIZADOR · v2026-06-20 · + Paquetes Prepagados (check por renglón en módulos) -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -2077,6 +2078,17 @@ function removeModuleItem(idx) {
   renderQuote();
 }
 
+// Marca/desmarca un item de módulo como "paquete prepagado".
+// Los prepagados se cobran 100% al aceptar (Cobros, reglas normales) y se
+// redimen después, una unidad a la vez. El flag viaja en el objeto del item,
+// así que persiste al guardar/cargar la cotización (deep-copy en saveQuote/loadQuote).
+function toggleModulePrepagado(idx, checked) {
+  if (moduleItems[idx]) {
+    moduleItems[idx].prepagado = !!checked;
+    renderQuote();
+  }
+}
+
 function procGrandTotal(p) {
   // Suma de todos los componentes asumiendo que es la 1ª cirugía (sin descuento qx/anest).
   return (p.hon||0)+(p.qx||0)+(p.anest||0)+(p.hosp||0)+(p.vpo||0)+(p.vpa||0)+(p.faja||0)+(p.impl||0)+(p.cons||0);
@@ -2371,7 +2383,12 @@ function renderQuote() {
         totModulos += importe;
         html += '<tr>'
           + '<td><input type="number" min="1" value="'+(it.qty||1)+'" oninput="updateModuleQty('+rec.gi+',this.value)" style="width:46px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:3px 6px;font-size:11px;text-align:center;font-family:inherit;outline:none"></td>'
-          + '<td>'+escapeHtml(it.n)+(it.cat ? '<span class="cat-tag">'+escapeHtml(it.cat)+'</span>' : '')+'</td>'
+          + '<td>'+escapeHtml(it.n)+(it.cat ? '<span class="cat-tag">'+escapeHtml(it.cat)+'</span>' : '')
+            + '<label class="prepago-toggle" style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10px;letter-spacing:.3px;cursor:pointer;font-weight:'+(it.prepagado?'600':'400')+';color:'+(it.prepagado?'var(--green)':'var(--soft)')+'">'
+            + '<input type="checkbox" '+(it.prepagado?'checked':'')+' onchange="toggleModulePrepagado('+rec.gi+',this.checked)" style="accent-color:var(--green);cursor:pointer;margin:0;width:14px;height:14px">'
+            + (it.prepagado ? '📦 Paquete prepagado — se redime después' : 'Marcar como paquete prepagado')
+            + '</label>'
+          + '</td>'
           + '<td class="r">'+fmt(it.precio||0)+'</td>'
           + '<td class="r">'+fmt(importe)+'</td>'
           + '<td class="r"><button class="extra-del" onclick="removeModuleItem('+rec.gi+')" title="Quitar este item" style="background:transparent;border:none;color:var(--mid);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:var(--r);transition:color .15s,background .15s" onmouseover="this.style.color=\'var(--red)\';this.style.background=\'rgba(192,57,43,0.08)\'" onmouseout="this.style.color=\'var(--mid)\';this.style.background=\'transparent\'">×</button></td>'
@@ -2753,7 +2770,7 @@ function marcarAceptada(i) {
             // Escribir a Sistema de Cobros después de subir a Drive
             setTimeout(function(){
               var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
-              if (quoteData) escribirACobros(quoteData);
+              if (quoteData) { escribirACobros(quoteData); _crearPrepagadoSiAplica(quoteData); }
             }, 2000);
             // Refrescar badges de estado de pago (la cotización entra como "Pendiente")
             setTimeout(function(){ if (typeof cargarEstadosPago === 'function') cargarEstadosPago(); }, 3500);
@@ -4256,6 +4273,47 @@ function calcHonorariosTotal(h) {
   // El descuento general se aplica al total, pero los honorarios de módulos ya están en el gran total
   // con descuento aplicado. Aquí reportamos el monto bruto antes de descuento general.
   return honCirugias + honModulos;
+}
+
+// ── PAQUETES PREPAGADOS ──
+// Si la cotización tiene tratamientos de módulo marcados como prepagados,
+// crea UN paquete prepagado en el gateway (cabecera + items). Cada item lleva
+// su cantidad = qty del renglón (2 Botox → 2 redenciones). No cobra: el cobro 100%
+// lo hace Cobros con sus reglas. Se dispara al aceptar, junto con escribirACobros.
+async function _crearPrepagadoSiAplica(h) {
+  var items = (h.moduleItems || []).filter(function(it){ return it.prepagado; });
+  if (!items.length) return;   // no hay prepagados en esta cotización
+  if (!COBROS_GATEWAY_URL || COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
+    console.warn('[Prepagado] Gateway URL no configurada.');
+    return;
+  }
+  var session = (typeof _authGetSession === 'function') ? _authGetSession() : null;
+  var payload = {
+    action:         'crearPaquetePrepagado',
+    cotizacionId:   h.id,
+    pacienteId:     h.pacienteId || '',
+    pacienteNombre: h.nombre || '',
+    creadoPor:      session ? session.email : '',
+    items: items.map(function(it){
+      return { tratamiento: it.n, cantidad: Math.max(1, parseInt(it.qty, 10) || 1) };
+    })
+  };
+  try {
+    var r = await fetch(COBROS_GATEWAY_URL, { method: 'POST', body: JSON.stringify(payload) });
+    var responseText = await r.text();
+    var result;
+    try { result = JSON.parse(responseText); }
+    catch(parseErr) { throw new Error('Respuesta no es JSON. Status: ' + r.status); }
+    if (result.ok) {
+      console.log('[Prepagado] Paquete creado:', result.paqueteId, result.items);
+      toast('✓ Paquete prepagado ' + result.paqueteId + ' creado (' + items.length + ' tratamiento(s)).', 'success');
+    } else {
+      throw new Error(result.error || 'Error desconocido');
+    }
+  } catch(e) {
+    console.error('[Prepagado] Error:', e);
+    toast('⚠ No se pudo crear el paquete prepagado: ' + e.message, 'error');
+  }
 }
 
 // Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
