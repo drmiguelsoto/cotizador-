@@ -736,11 +736,15 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
       <label for="descuento-hon" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Honorarios Médicos (%)</label>
       <input type="number" id="descuento-hon" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px">
+      <label for="descuento-iny" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Inyectables (%)</label>
+      <input type="number" id="descuento-iny" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
+    </div>
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
       <label for="descuento" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Descuento General (%)</label>
       <input type="number" id="descuento" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
-    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">El descuento a honorarios se aplica primero. El descuento general se aplica al total después.</div>
+    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios e inyectables se descuentan primero (solo afectan la parte del Dr., no Renasté). El descuento general se aplica al total después.</div>
 
     <!-- Precio Objetivo -->
     <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
@@ -2244,6 +2248,7 @@ function renderQuote() {
   const body = document.getElementById('quote-body');
   const disc = parseFloat(document.getElementById('descuento').value)||0;
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
+  const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
 
   // Selection bar update
   updateSelBar();
@@ -2405,13 +2410,23 @@ function renderQuote() {
   }
 
   var grandSub = totHonNet2 + totHosp + totModulos;
+  // Descuento de inyectables: solo afecta la parte del Dr. (los inyectables son 100% Dr.),
+  // se aplica antes del descuento general (igual que el de honorarios).
+  var totIny = moduleItems.reduce(function(s,it){
+    return s + (it.module === 'inyectables' ? (it.precio||0)*(it.qty||1) : 0);
+  }, 0);
+  var inyDiscAmt = totIny * inyDisc / 100;
+  grandSub = grandSub - inyDiscAmt;
   var discAmt = grandSub*disc/100;
   var grandTot = grandSub-discAmt;
-  if(honDisc>0 || disc>0){
+  if(honDisc>0 || disc>0 || inyDisc>0){
     var bruto = totHon2 + totHosp + totModulos;
     html+='<div class="sub-line"><span>Subtotal Bruto</span><span>'+fmt(bruto)+'</span></div>';
     if(honDisc>0){
       html+='<div class="sub-line disc"><span>Descuento Honorarios ('+honDisc+'%)</span><span>− '+fmt(honDiscAmt2)+'</span></div>';
+    }
+    if(inyDisc>0){
+      html+='<div class="sub-line disc"><span>Descuento Inyectables ('+inyDisc+'%)</span><span>− '+fmt(inyDiscAmt)+'</span></div>';
     }
     if(disc>0){
       html+='<div class="sub-line disc"><span>Descuento General ('+disc+'%)</span><span>− '+fmt(discAmt)+'</span></div>';
@@ -2463,8 +2478,10 @@ function updateSelBar() {
   restSub += moduleItems.reduce(function(s,it){ return s + (it.precio||0) * (it.qty||1); }, 0);
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
   const disc = parseFloat(document.getElementById('descuento').value)||0;
+  const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
   const honNet = honSub * (1 - honDisc/100);
-  const grandSub = honNet + restSub;
+  const inySubBar = moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
+  const grandSub = honNet + restSub - (inySubBar * inyDisc/100);
   const grandTot = grandSub * (1 - disc/100);
   tot.textContent = fmt(grandTot);
 }
@@ -2611,11 +2628,14 @@ async function saveQuote(){
   if(!selected.length&&!extras.length&&!moduleItems.length){toast('Agrega al menos un procedimiento.','error'); _saving=false; if(btnGuardar){btnGuardar.disabled=false;btnGuardar.style.opacity='';} return;}
   var disc=parseFloat(document.getElementById('descuento').value)||0;
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
+  var inyDisc=parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
   var honSub=0, restSub=0;
   selected.forEach(function(s){Object.keys(s.breakdown).forEach(function(k){if(s.breakdown[k].on){if(k==='hon')honSub+=s.breakdown[k].v;else restSub+=s.breakdown[k].v;}});});
   restSub+=extras.reduce(function(s,e){return s+e.p;},0);
   restSub+=moduleItems.reduce(function(s,it){ return s + (it.precio||0) * (it.qty||1); }, 0);
-  var total=(honSub*(1-honDisc/100)+restSub)*(1-disc/100);
+  var inySub=moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
+  var inyDiscAmt = inySub * inyDisc/100;
+  var total=(honSub*(1-honDisc/100)+restSub-inyDiscAmt)*(1-disc/100);
   var ahora = new Date();
   var session = (typeof _authGetSession === 'function') ? _authGetSession() : null;
 
@@ -2660,6 +2680,7 @@ async function saveQuote(){
     extras:JSON.parse(JSON.stringify(extras)),
     descuento:disc,
     descuentoHon:honDisc,
+    descuentoIny:inyDisc,
     total:total,
     status:'borrador',
     sustituyeA: _sustituyendoA || '',
@@ -2792,24 +2813,24 @@ function marcarAceptada(i) {
         });
       }).then(function(){
         toast('✓ Cotización ' + quoteId + ' marcada como ACEPTADA.','success');
-        // Si Drive está conectado, subir versión aceptada automáticamente
+
+        // ── Cobros + sustitución: SIEMPRE (no depende de que Drive esté conectado) ──
+        (async function(){
+          var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
+          if (quoteData) {
+            await escribirACobros(quoteData);
+            await _crearPrepagadoSiAplica(quoteData);
+            if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
+            if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1200);
+          }
+        })();
+
+        // ── Subir a Drive SOLO si está conectado (independiente de lo anterior) ──
         if (driveToken) {
-          // Buscar índice actualizado en qHistory (puede haber cambiado por sync)
           var newIdx = qHistory.findIndex(function(q){ return q.id === quoteId; });
           if (newIdx >= 0) {
             loadQuote(newIdx);
             setTimeout(function(){ guardarEnDrive(true); }, 500);
-            // Escribir a Sistema de Cobros después de subir a Drive
-            setTimeout(async function(){
-              var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
-              if (quoteData) {
-                await escribirACobros(quoteData);
-                await _crearPrepagadoSiAplica(quoteData);
-                if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
-              }
-            }, 2000);
-            // Refrescar badges de estado de pago (la cotización entra como "Pendiente")
-            setTimeout(function(){ if (typeof cargarEstadosPago === 'function') cargarEstadosPago(); }, 3500);
           }
         }
         _accepting = false;
@@ -2952,6 +2973,7 @@ function loadQuote(i){
   document.getElementById('p-email').value=h.email||'';
   document.getElementById('descuento').value=h.descuento||0;
   document.getElementById('descuento-hon').value=h.descuentoHon||0;
+  var _elIny=document.getElementById('descuento-iny'); if(_elIny) _elIny.value=h.descuentoIny||0;
   _selectedPatientId=h.pacienteId||'';
   selected=JSON.parse(JSON.stringify(h.selected||[]));
   selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
@@ -3043,6 +3065,7 @@ function resetForm(){
     document.getElementById('p-sexo').value='F';
     document.getElementById('descuento').value=0;
     document.getElementById('descuento-hon').value=0;
+    var _elIny2=document.getElementById('descuento-iny'); if(_elIny2) _elIny2.value=0;
     qCounter=parseInt(localStorage.getItem('ms_qc')||'1');
     updateQNum();buildProcsList();
     ['q-nombre','q-fnac','q-edad'].forEach(function(id){document.getElementById(id).textContent='—';});
@@ -4418,21 +4441,22 @@ function calcRenasteLiberable(h) {
 function calcHonorariosTotal(h) {
   var sel = h.selected || [];
   var honDisc = h.descuentoHon || 0;
+  var inyDisc = h.descuentoIny || 0;
   // Honorarios de cirugías (con descuento de honorarios)
   var honBruto = sel.reduce(function(sum, s) {
     return sum + (s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0);
   }, 0);
   var honCirugias = honBruto * (1 - honDisc / 100);
-  // Items de módulos que son 100% del Dr. (descuento general, no de honorarios)
-  var disc = h.descuento || 0;
+  // Items de módulos que son 100% del Dr. Los inyectables llevan su propio descuento.
   var honModulos = (h.moduleItems || []).reduce(function(sum, it) {
     if (_isItemDr(it.module, it.cat, it.n)) {
-      return sum + (it.precio || 0) * (it.qty || 1);
+      var importe = (it.precio || 0) * (it.qty || 1);
+      if (it.module === 'inyectables') importe = importe * (1 - inyDisc / 100);
+      return sum + importe;
     }
     return sum;
   }, 0);
-  // El descuento general se aplica al total, pero los honorarios de módulos ya están en el gran total
-  // con descuento aplicado. Aquí reportamos el monto bruto antes de descuento general.
+  // El descuento general se aplica al total; aquí reportamos el monto antes de descuento general.
   return honCirugias + honModulos;
 }
 
