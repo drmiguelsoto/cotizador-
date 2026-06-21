@@ -1837,6 +1837,7 @@ let qCounter = parseInt(localStorage.getItem('ms_qc')||'1');
 let qHistory = JSON.parse(localStorage.getItem('ms_qh')||'[]');
 let activeCat = null;                                          // category chip filter
 let activeModule = 'quirurgicos';                              // módulo activo en el dropdown
+let _sustituyendoA = null;                                     // COT original cuando estamos en modo sustitución
 
 // ── PRICING LOGIC (unchanged) ──
 function makeBreakdown(p, idx) {
@@ -2661,6 +2662,7 @@ async function saveQuote(){
     descuentoHon:honDisc,
     total:total,
     status:'borrador',
+    sustituyeA: _sustituyendoA || '',
     version:1,
     createdBy: session ? session.email : 'unknown'
   };
@@ -2678,7 +2680,12 @@ async function saveQuote(){
   }).then(function(){
     var saved = qHistory[0];
     var savedId = saved ? saved.id : 'COT-XXXX';
-    toast('Cotización ' + savedId + ' guardada.', 'success');
+    if (saved && saved.sustituyeA) {
+      toast('Cotización ' + savedId + ' guardada (sustituye a ' + saved.sustituyeA + '). Acéptala para trasladar el anticipo.', 'success');
+    } else {
+      toast('Cotización ' + savedId + ' guardada.', 'success');
+    }
+    _sustituyendoA = null; _renderSustBanner();
 
     // Subir PDF a Drive automáticamente al guardar
     if (driveToken) {
@@ -2716,7 +2723,10 @@ function renderHistory(){
   list.innerHTML = filtradas.map(function(h){
     var i = qHistory.indexOf(h);
     var esAceptada = h.status === 'aceptada';
-    var statusBadge = esAceptada
+    var esSustituida = h.status === 'sustituida';
+    var statusBadge = esSustituida
+      ? '<span style="font-size:8px;letter-spacing:1px;background:#8a7b6c;color:#fff;padding:2px 7px;border-radius:2px;margin-left:6px">SUSTITUIDA</span>'
+      : esAceptada
       ? '<span style="font-size:8px;letter-spacing:1px;background:#0f9d58;color:#fff;padding:2px 7px;border-radius:2px;margin-left:6px">ACEPTADA</span>'
       : '<span style="font-size:8px;letter-spacing:1px;background:var(--border);color:var(--mid);padding:2px 7px;border-radius:2px;margin-left:6px">BORRADOR</span>';
     var payBadge = '';
@@ -2726,9 +2736,14 @@ function renderHistory(){
       var _tip = _ep && _ep.montoPagado ? 'Pagado: ' + fmt(_ep.montoPagado) + (_ep.fechaPago ? ' · ' + _ep.fechaPago : '') : 'Sin pagos registrados';
       payBadge = '<span title="' + _tip + '" style="font-size:8px;letter-spacing:1px;background:' + _pb.bg + ';color:' + _pb.color + ';padding:2px 7px;border-radius:2px;margin-left:6px;border:1px solid ' + (_pb.bg === 'var(--cream)' ? 'var(--border)' : _pb.bg) + '">' + _pb.label + '</span>';
     }
-    var aceptarBtn = !esAceptada
+    var aceptarBtn = esSustituida
+      ? '<div class="del-hist" style="color:#8a7b6c" title="Reemplazada por ' + (h.sustituidaPor||'') + '">↳ ' + (h.sustituidaPor||'sustituida') + '</div>'
+      : !esAceptada
       ? '<div class="del-hist" style="color:#0f9d58" onclick="event.stopPropagation();marcarAceptada('+i+')">✓ aceptar</div>'
       : '<div class="del-hist" style="color:#0f9d58">✓ aceptada</div>';
+    var sustituirBtn = (esAceptada && !esSustituida)
+      ? '<div class="del-hist" style="color:#2f6fb3" onclick="event.stopPropagation();sustituirCotizacion('+i+')">⇄ sustituir</div>'
+      : '';
     return '<div class="hist-item">'+
       '<div style="flex:1;cursor:pointer;min-width:0" onclick="loadQuote('+i+')">'+
         '<div class="h-name">'+h.nombre+statusBadge+payBadge+'</div>'+
@@ -2737,6 +2752,7 @@ function renderHistory(){
       '<div style="text-align:right;flex-shrink:0">'+
         '<div class="h-amt">'+fmt(h.total)+'</div>'+
         aceptarBtn+
+        sustituirBtn+
         '<div class="del-hist" onclick="event.stopPropagation();delQuote('+i+')">eliminar</div>'+
       '</div>'+
     '</div>';
@@ -2780,9 +2796,13 @@ function marcarAceptada(i) {
             loadQuote(newIdx);
             setTimeout(function(){ guardarEnDrive(true); }, 500);
             // Escribir a Sistema de Cobros después de subir a Drive
-            setTimeout(function(){
+            setTimeout(async function(){
               var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
-              if (quoteData) { escribirACobros(quoteData); _crearPrepagadoSiAplica(quoteData); }
+              if (quoteData) {
+                await escribirACobros(quoteData);
+                await _crearPrepagadoSiAplica(quoteData);
+                if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
+              }
             }, 2000);
             // Refrescar badges de estado de pago (la cotización entra como "Pendiente")
             setTimeout(function(){ if (typeof cargarEstadosPago === 'function') cargarEstadosPago(); }, 3500);
@@ -2795,7 +2815,111 @@ function marcarAceptada(i) {
   );
 }
 
+// ══════════════════════════════════════════════════════
+//  SUSTITUCIÓN DE COTIZACIÓN ACEPTADA
+//  Carga una cotización aceptada al formulario para editarla; al guardar se crea
+//  una cotización NUEVA con folio propio, y al ACEPTARLA se traslada el anticipo
+//  de la original (vía gateway sustituirCotizacion). La original queda marcada
+//  "Sustituida" (registro de auditoría, no se borra).
+// ══════════════════════════════════════════════════════
+
+function sustituirCotizacion(i){
+  var h = qHistory[i];
+  if (!h || h.status !== 'aceptada') return;
+  // Cargar todos los datos de la original al formulario (reusa loadQuote)
+  loadQuote(i);
+  // Entrar en modo sustitución (loadQuote limpia el flag, por eso se setea DESPUÉS)
+  _sustituyendoA = h.id;
+  // El folio real se asigna al guardar; mientras tanto, indicar que es nueva
+  document.getElementById('q-num').textContent   = '— nueva —';
+  document.getElementById('cot-num').textContent = '— nueva —';
+  _renderSustBanner();
+  toast('Modo sustitución sobre ' + h.id + '. Edita libremente; al aceptar la nueva se traslada el anticipo.','success');
+}
+
+// Banner visible mientras se está sustituyendo.
+function _renderSustBanner(){
+  var existing = document.getElementById('sust-banner');
+  if (!_sustituyendoA) { if (existing) existing.remove(); return; }
+  if (!existing) {
+    existing = document.createElement('div');
+    existing.id = 'sust-banner';
+    existing.style.cssText = 'background:#2f6fb3;color:#fff;padding:11px 16px;border-radius:var(--r);font-size:12px;line-height:1.5;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:var(--shadow-sm)';
+    var main = document.querySelector('.main');
+    if (main) main.insertBefore(existing, main.firstChild);
+  }
+  existing.innerHTML =
+    '<span>⇄ <b>Modo sustitución</b> — esta cotización reemplazará a <b>' + _sustituyendoA + '</b>. Al GUARDAR se crea con folio nuevo; al ACEPTARLA se traslada el anticipo de ' + _sustituyendoA + '.</span>' +
+    '<button onclick="_cancelarSustitucion()" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:var(--r);padding:6px 12px;font-size:10px;letter-spacing:1px;cursor:pointer;font-family:inherit;white-space:nowrap">Cancelar</button>';
+}
+
+function _cancelarSustitucion(){
+  _sustituyendoA = null;
+  _renderSustBanner();
+  document.getElementById('q-num').textContent   = document.getElementById('cot-num').textContent;
+  toast('Sustitución cancelada — queda como cotización nueva normal.','info');
+}
+
+// Se dispara al ACEPTAR la cotización nueva (cuando trae sustituyeA).
+// 1) Pide al gateway enlazar nueva↔original y trasladar el anticipo.
+// 2) Marca la original como 'sustituida' localmente (badge).
+// 3) Avisa sobre paquetes prepagados de la original (no los cancela automáticamente).
+async function _procesarSustitucion(nuevaQuote){
+  var original = nuevaQuote.sustituyeA;
+  if (!original) return;
+
+  // 1. Gateway: enlazar + heredar anticipo
+  try {
+    var r = await fetch(COBROS_GATEWAY_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action:'sustituirCotizacion', cotizacionNueva: nuevaQuote.id, cotizacionOriginal: original })
+    });
+    var res = JSON.parse(await r.text());
+    if (res.ok) {
+      toast('✓ ' + original + ' sustituida por ' + nuevaQuote.id + '. Anticipo trasladado: ' + fmt(res.anticipoHeredado || 0) + '.','success');
+    } else {
+      throw new Error(res.error || 'desconocido');
+    }
+  } catch (e) {
+    toast('⚠ No se pudo trasladar el anticipo en el gateway: ' + e.message,'error');
+  }
+
+  // 2. Marcar la original como sustituida (local + sync)
+  _historialApplyAndSync(function(currentQuotes){
+    return currentQuotes.map(function(q){
+      if (q.id === original) return Object.assign({}, q, { status:'sustituida', sustituidaPor: nuevaQuote.id });
+      return q;
+    });
+  });
+
+  // 3. Avisar sobre prepagados de la original
+  await _avisarPrepagadosOriginal(original, nuevaQuote.nombre);
+}
+
+// Revisa si la cotización original tenía paquetes prepagados. NO los cancela
+// (el gateway aún no expone cancelar-prepagado); solo avisa para revisión manual,
+// distinguiendo si ya hubo redenciones (migrar saldo a mano) o no.
+async function _avisarPrepagadosOriginal(original, nombre){
+  try {
+    var r = await fetch(COBROS_GATEWAY_URL + '?action=buscarPrepagados&paciente=' + encodeURIComponent(nombre || ''), { redirect:'follow' });
+    var res = JSON.parse(await r.text());
+    if (!res.ok || !res.prepagados) return;
+    var delOrig = res.prepagados.filter(function(p){ return String(p.cotizacionId||'').trim() === original; });
+    if (!delOrig.length) return;
+    var ids = delOrig.map(function(p){ return p.paqueteId; }).join(', ');
+    var conRedencion = delOrig.some(function(p){ return (p.items||[]).some(function(it){ return (it.consumidas||0) > 0; }); });
+    if (conRedencion) {
+      confirmDialog('Paquete prepagado con redenciones',
+        'La cotización original ' + original + ' tiene paquete(s) prepagado(s) (' + ids + ') con sesiones YA redimidas. NO se cancelan automáticamente — revísalos para migrar el saldo restante a mano.',
+        function(){}, function(){});
+    } else {
+      toast('⚠ ' + original + ' tenía paquete prepagado (' + ids + ') sin redenciones. La nueva ya creó el suyo; conviene cancelar el viejo manualmente.','info');
+    }
+  } catch (e) { /* silencioso: el aviso es informativo */ }
+}
+
 function loadQuote(i){
+  _sustituyendoA = null; _renderSustBanner();
   var h=qHistory[i];
   document.getElementById('p-nombre').value=h.nombre;
   document.getElementById('p-fnac').value=h.fnac||'';
@@ -2890,6 +3014,7 @@ function delQuote(i){
 function resetForm(){
   confirmDialog('Nueva cotización', '¿Iniciar una nueva cotización? Se perderán los datos no guardados.', function(){
     selected=[];moduleItems=[];extras=[];pacSearchClear();
+    _sustituyendoA=null; _renderSustBanner();
     ['p-nombre','p-fnac','p-tel','p-email','notas'].forEach(function(id){document.getElementById(id).value='';});
     document.getElementById('p-sexo').value='F';
     document.getElementById('descuento').value=0;
