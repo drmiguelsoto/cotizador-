@@ -2744,6 +2744,9 @@ function renderHistory(){
     var sustituirBtn = (esAceptada && !esSustituida)
       ? '<div class="del-hist" style="color:#2f6fb3" onclick="event.stopPropagation();sustituirCotizacion('+i+')">⇄ sustituir</div>'
       : '';
+    var reRegBtn = (esAceptada && !esSustituida)
+      ? '<div class="del-hist" style="color:#d4a017" onclick="event.stopPropagation();reRegistrarCobros('+i+')" title="Re-registrar en Sistema de Cobros (no duplica)">↻ Cobros</div>'
+      : '';
     return '<div class="hist-item">'+
       '<div style="flex:1;cursor:pointer;min-width:0" onclick="loadQuote('+i+')">'+
         '<div class="h-name">'+h.nombre+statusBadge+payBadge+'</div>'+
@@ -2753,6 +2756,7 @@ function renderHistory(){
         '<div class="h-amt">'+fmt(h.total)+'</div>'+
         aceptarBtn+
         sustituirBtn+
+        reRegBtn+
         '<div class="del-hist" onclick="event.stopPropagation();delQuote('+i+')">eliminar</div>'+
       '</div>'+
     '</div>';
@@ -2822,6 +2826,26 @@ function marcarAceptada(i) {
 //  de la original (vía gateway sustituirCotizacion). La original queda marcada
 //  "Sustituida" (registro de auditoría, no se borra).
 // ══════════════════════════════════════════════════════
+
+// Re-registra una cotización aceptada en el Sistema de Cobros (idempotente gracias
+// al upsert del gateway: si ya existe, actualiza; si no, la agrega — nunca duplica).
+// Sirve para empujar cotizaciones aceptadas que nunca llegaron al Sheet sellado.
+// No recrea prepagados (solo re-escribe la cotización + su detalle).
+async function reRegistrarCobros(i){
+  var h = qHistory[i];
+  if (!h) return;
+  if (h.status !== 'aceptada' && h.status !== 'sustituida') {
+    toast('Solo aplica a cotizaciones aceptadas.','error');
+    return;
+  }
+  toast('Re-registrando ' + h.id + ' en Cobros…','success');
+  try {
+    await escribirACobros(h);
+    if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1500);
+  } catch (e) {
+    toast('⚠ No se pudo re-registrar ' + h.id + ': ' + e.message,'error');
+  }
+}
 
 function sustituirCotizacion(i){
   var h = qHistory[i];
