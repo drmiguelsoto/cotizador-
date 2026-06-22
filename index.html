@@ -4682,8 +4682,7 @@ async function escribirACobros(h) {
     })();
   }catch(e){}
 </script>
-<!-- ===================== fin lanzador MS Universe ===================== -->
-  <!-- ============================================================
+<!-- ============================================================
      MS UNIVERSE · Lanzador minimalista entre apps
      Pega este bloque COMPLETO (incluido el <script> del final)
      justo ANTES de </body> en cada app:
@@ -4735,15 +4734,24 @@ async function escribirACobros(h) {
 
 <script>
   (function(){
-    var box = document.getElementById('ms-switch');
-    if(!box) return;
-    var trigger = box.querySelector('.ms-trigger');
-    var sub = location.hostname.split('.')[0]; // altapacientes | cotizador | agenda | cobros | paquetes
-    box.querySelectorAll('.ms-menu a').forEach(function(a){
-      if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
+    function markActive(){
+      var box = document.getElementById('ms-switch'); if(!box) return;
+      var sub = location.hostname.split('.')[0];
+      box.querySelectorAll('.ms-menu a').forEach(function(a){
+        if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
+      });
+    }
+    if (document.readyState !== 'loading') markActive();
+    else document.addEventListener('DOMContentLoaded', markActive);
+
+    // Delegación en document: funciona aunque el bloque se pegue en cualquier parte
+    document.addEventListener('click', function(e){
+      var box = document.getElementById('ms-switch'); if(!box) return;
+      var onTrigger = e.target.closest && e.target.closest('.ms-trigger');
+      var insideBox = e.target.closest && e.target.closest('#ms-switch');
+      if (onTrigger){ e.stopPropagation(); box.classList.toggle('open'); }
+      else if (!insideBox){ box.classList.remove('open'); }
     });
-    trigger.addEventListener('click', function(e){ e.stopPropagation(); box.classList.toggle('open'); });
-    document.addEventListener('click', function(){ box.classList.remove('open'); });
   })();
 </script>
 <!-- ===================== fin lanzador MS Universe ===================== -->
