@@ -4501,12 +4501,51 @@ async function _crearPrepagadoSiAplica(h) {
   }
 }
 
+// Espera (con timeout) a que los precios de Google Sheets terminen de cargar.
+// Si nunca cargan, resuelve en false y deja seguir (no bloquea la aceptación),
+// pero el guard de total sigue protegiendo contra filas vacías.
+function _asegurarPreciosCargados(timeoutMs) {
+  timeoutMs = timeoutMs || 7000;
+  return new Promise(function (resolve) {
+    var ps = window.MS_PRICES;
+    if (ps && ps.loaded) { resolve(true); return; }
+    // Si aún no se ha intentado cargar (o falló sin marcar error), dispararlo.
+    if (typeof loadPricesFromSheets === 'function' &&
+        (!ps || (!ps.loaded && !ps.error))) {
+      try { loadPricesFromSheets(); } catch (e) {}
+    }
+    var t0 = Date.now();
+    var iv = setInterval(function () {
+      var p = window.MS_PRICES;
+      if (p && (p.loaded || p.error)) { clearInterval(iv); resolve(!!p.loaded); }
+      else if (Date.now() - t0 > timeoutMs) { clearInterval(iv); resolve(false); }
+    }, 200);
+  });
+}
+
 // Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
 async function escribirACobros(h) {
   if (COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
     console.warn('[Cobros] Gateway URL no configurada.');
     toast('⚠ Cobros Gateway no configurado — contactar al administrador.', 'error');
     return;
+  }
+
+  // ── GUARD 1: total válido ──
+  // Sin un GranTotal > 0 no se escribe NADA. Esto impide filas vacías en Cotizaciones.
+  var _granTotal = Number(h && h.total) || 0;
+  if (!h || !h.id || _granTotal <= 0) {
+    console.error('[Cobros] Abortado: cotización sin total válido.', { id: h && h.id, total: h && h.total });
+    toast('⚠ No se registró en Cobros: la cotización no tiene un total válido. Revisa los procedimientos y reintenta con «↻ Cobros».', 'error');
+    return;
+  }
+
+  // ── GUARD 2: precios cargados antes de calcular costos de Renasté ──
+  var _preciosOK = await _asegurarPreciosCargados();
+  if (!_preciosOK) {
+    console.warn('[Cobros] Precios GH Renasté no cargados; RenasteRealCost/Liberable podrían salir incompletos.');
+    // No abortamos: GranTotal y Honorarios son correctos; el usuario puede
+    // re-registrar con «↻ Cobros» una vez que los precios carguen.
   }
 
   var honDisc = h.descuentoHon || 0;
