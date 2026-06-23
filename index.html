@@ -2795,50 +2795,174 @@ function marcarAceptada(i) {
   var h = qHistory[i];
   if (!h || h.status === 'aceptada') return;
   _accepting = true;
-  var quoteId = h.id;
-  confirmDialog(
-    'Marcar como Aceptada',
-    '¿' + (h.sexo === 'M' ? 'El paciente ' : 'La paciente ') + h.nombre + ' pagó el anticipo y acepta la cotización ' + h.id + '?',
-    function(){
-      // Marcar inmediatamente en local para que el botón desaparezca al re-renderizar
-      h.status = 'aceptada';
-      renderHistory();
-      var fechaAceptada = new Date().toLocaleDateString('es-MX');
-      _historialApplyAndSync(function(currentQuotes){
-        return currentQuotes.map(function(q){
-          if (q.id === quoteId) {
-            return Object.assign({}, q, { status: 'aceptada', fechaAceptada: fechaAceptada });
-          }
-          return q;
-        });
-      }).then(function(){
-        toast('✓ Cotización ' + quoteId + ' marcada como ACEPTADA.','success');
 
-        // ── Cobros + sustitución: SIEMPRE (no depende de que Drive esté conectado) ──
-        (async function(){
-          var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
-          if (quoteData) {
-            await escribirACobros(quoteData);
-            await _crearPrepagadoSiAplica(quoteData);
-            if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
-            if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1200);
-          }
-        })();
-
-        // ── Subir a Drive SOLO si está conectado (independiente de lo anterior) ──
-        if (driveToken) {
-          var newIdx = qHistory.findIndex(function(q){ return q.id === quoteId; });
-          if (newIdx >= 0) {
-            loadQuote(newIdx);
-            setTimeout(function(){ guardarEnDrive(true); }, 500);
-          }
-        }
-        _accepting = false;
+  // ── GUARDIA DE ACEPTACIÓN ──
+  // Si el paciente ya tiene otra cotización aceptada CON SALDO PENDIENTE,
+  // frenamos y ofrecemos: reemplazar (sustituir) o aceptar como adicional.
+  _buscarCotizacionPreviaPendiente(h, function(previa){
+    if (previa) {
+      _mostrarGuardiaDialog(h, previa, function(decision){
+        if (decision === 'cancelar') { _accepting = false; return; }
+        if (decision === 'sustituye') { h.sustituyeA = previa.id; }
+        _ejecutarAceptacion(i);
       });
-    },
-    function(){ _accepting = false; }
-  );
+    } else {
+      confirmDialog(
+        'Marcar como Aceptada',
+        '¿' + (h.sexo === 'M' ? 'El paciente ' : 'La paciente ') + h.nombre + ' pagó el anticipo y acepta la cotización ' + h.id + '?',
+        function(){ _ejecutarAceptacion(i); },
+        function(){ _accepting = false; }
+      );
+    }
+  });
 }
+
+// Ejecuta la aceptación real (la confirmación ya se dio en el guardia).
+function _ejecutarAceptacion(i) {
+  var h = qHistory[i];
+  if (!h) { _accepting = false; return; }
+  var quoteId = h.id;
+
+  // Marcar inmediatamente en local para que el botón desaparezca al re-renderizar
+  h.status = 'aceptada';
+  renderHistory();
+  var fechaAceptada = new Date().toLocaleDateString('es-MX');
+  _historialApplyAndSync(function(currentQuotes){
+    return currentQuotes.map(function(q){
+      if (q.id === quoteId) {
+        var extra = { status: 'aceptada', fechaAceptada: fechaAceptada };
+        if (h.sustituyeA) extra.sustituyeA = h.sustituyeA;  // persistir cadena si aplica
+        return Object.assign({}, q, extra);
+      }
+      return q;
+    });
+  }).then(function(){
+    toast('✓ Cotización ' + quoteId + ' marcada como ACEPTADA.','success');
+
+    // ── Cobros + sustitución: SIEMPRE (no depende de que Drive esté conectado) ──
+    (async function(){
+      var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
+      if (quoteData) {
+        if (h.sustituyeA && !quoteData.sustituyeA) quoteData.sustituyeA = h.sustituyeA;
+        await escribirACobros(quoteData);
+        await _crearPrepagadoSiAplica(quoteData);
+        if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
+        if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1200);
+      }
+    })();
+
+    // ── Subir a Drive SOLO si está conectado (independiente de lo anterior) ──
+    if (driveToken) {
+      var newIdx = qHistory.findIndex(function(q){ return q.id === quoteId; });
+      if (newIdx >= 0) {
+        loadQuote(newIdx);
+        setTimeout(function(){ guardarEnDrive(true); }, 500);
+      }
+    }
+    _accepting = false;
+  });
+}
+
+// Busca una cotización previa del MISMO paciente que esté aceptada y con saldo
+// pendiente (no liquidada, no sustituida). Hace un fetch fresco de estados de
+// pago. Devuelve la más reciente vía cb(previa) o cb(null) si no hay / falla.
+async function _buscarCotizacionPreviaPendiente(h, cb) {
+  // Refrescar estados de pago (fetch fresco al gateway)
+  var estados = null;
+  if (COBROS_GATEWAY_URL && COBROS_GATEWAY_URL !== 'PEGAR_URL_DEL_DEPLOY_AQUI') {
+    try {
+      var r = await fetch(COBROS_GATEWAY_URL + '?action=estadoCotizaciones', { redirect: 'follow' });
+      var data = await r.json();
+      if (data && data.ok && data.estados) {
+        estados = data.estados;
+        _estadosPago = estados;                       // refrescar cache global
+        if (typeof renderHistory === 'function') renderHistory();
+      }
+    } catch (e) {
+      console.warn('[Guardia] No se pudieron cargar estados de pago:', e.message);
+    }
+  }
+  // Sin datos de saldo no podemos decidir con seguridad → no frenar (flujo normal)
+  if (!estados) { cb(null); return; }
+
+  // Identificar al paciente de h (por PacienteId si existe; si no, por nombre normalizado)
+  var pid        = String(h.pacienteId || '').trim();
+  var nombreNorm = quitarAcentos(String(h.nombre || '')).toLowerCase().trim();
+
+  var candidatas = qHistory.filter(function(q){
+    if (!q || q.id === h.id) return false;            // no ella misma
+    if (q.status !== 'aceptada') return false;        // solo aceptadas
+    // mismo paciente
+    var mismoPac = (pid && q.pacienteId)
+      ? (String(q.pacienteId).trim() === pid)
+      : (quitarAcentos(String(q.nombre || '')).toLowerCase().trim() === nombreNorm);
+    if (!mismoPac) return false;
+    // estado de pago: con saldo pendiente (no liquidada, no sustituida)
+    var ep = estados[q.id];
+    if (!ep) return false;
+    var e = quitarAcentos(String(ep.estadoPago || '')).toLowerCase();
+    if (e.indexOf('liquidad') >= 0) return false;     // ya pagada → no frenar
+    if (e.indexOf('sustitu')  >= 0) return false;     // ya sustituida → no frenar
+    return (Number(ep.saldo) || 0) > 0.01;            // debe quedar saldo
+  });
+
+  if (!candidatas.length) { cb(null); return; }
+
+  // Más reciente primero (por fechaISO)
+  candidatas.sort(function(a, b){
+    var fa = a.fechaISO || '', fb = b.fechaISO || '';
+    return fa < fb ? 1 : (fa > fb ? -1 : 0);
+  });
+  cb(candidatas[0]);
+}
+
+// Modal de decisión: reemplazar (sustituir) vs cirugía adicional vs cancelar.
+function _mostrarGuardiaDialog(h, previa, cb) {
+  var ep = (_estadosPago && _estadosPago[previa.id]) ? _estadosPago[previa.id] : {};
+  var saldoPrev = Number(ep.saldo) || 0;
+
+  var bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(3,7,7,.55);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
+  bg.innerHTML =
+    '<div style="background:var(--white);border-radius:6px;max-width:460px;width:100%;box-shadow:var(--shadow-lg);overflow:hidden;font-family:inherit">' +
+      '<div style="background:#2f6fb3;color:#fff;padding:14px 20px;font-size:11px;letter-spacing:1.5px;font-weight:700">⚠ ESTE PACIENTE YA TIENE UNA COTIZACIÓN CON SALDO</div>' +
+      '<div style="padding:22px 20px">' +
+        '<p style="font-size:13px;line-height:1.6;color:var(--black);margin:0 0 8px">' +
+          '<b>' + escapeHtml(String(h.nombre || '')) + '</b> ya tiene la cotización <b>' + escapeHtml(String(previa.id)) +
+          '</b> aceptada con un saldo pendiente de <b>' + fmt(saldoPrev) + '</b>.</p>' +
+        '<p style="font-size:12px;line-height:1.55;color:var(--mid);margin:0 0 18px">' +
+          '¿La cotización <b>' + escapeHtml(String(h.id)) + '</b> reemplaza ese plan, o es una cirugía adicional distinta?</p>' +
+        '<div style="display:flex;flex-direction:column;gap:9px">' +
+          '<button id="_g-sust" style="background:#2f6fb3;color:#fff;border:none;border-radius:var(--r);padding:13px 14px;font-size:11px;letter-spacing:1px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">' +
+            '⇄ REEMPLAZA A ' + escapeHtml(String(previa.id)) +
+            '<span style="display:block;font-weight:400;font-size:10px;opacity:.9;margin-top:3px;letter-spacing:.3px">Hereda el anticipo ya pagado y marca la anterior como sustituida</span></button>' +
+          '<button id="_g-add" style="background:var(--white);color:var(--black);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;font-size:11px;letter-spacing:1px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">' +
+            '+ ES UNA CIRUGÍA ADICIONAL' +
+            '<span style="display:block;font-weight:400;font-size:10px;color:var(--mid);margin-top:3px;letter-spacing:.3px">Procedimiento distinto e independiente del anterior</span></button>' +
+          '<button id="_g-cancel" style="background:transparent;color:var(--mid);border:none;padding:9px;font-size:10px;letter-spacing:1.5px;cursor:pointer;font-family:inherit;font-weight:600">CANCELAR</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(bg);
+
+  function close(){ if (bg && bg.parentNode) bg.parentNode.removeChild(bg); }
+  document.getElementById('_g-sust').onclick   = function(){ close(); cb('sustituye'); };
+  document.getElementById('_g-add').onclick    = function(){ close(); cb('adicional'); };
+  document.getElementById('_g-cancel').onclick = function(){ close(); cb('cancelar'); };
+  bg.onclick = function(e){ if (e.target === bg) { close(); cb('cancelar'); } };
+}
+
+// Auto-refresco de badges al volver el foco a la pestaña del cotizador
+// (p. ej. después de cobrar en la pestaña de Cobros) — con throttle de 8s.
+(function(){
+  var _lastBadgeRefresh = 0;
+  window.addEventListener('focus', function(){
+    var now = Date.now();
+    if (now - _lastBadgeRefresh < 8000) return;
+    _lastBadgeRefresh = now;
+    if (typeof cargarEstadosPago === 'function') cargarEstadosPago();
+  });
+})();
 
 // ══════════════════════════════════════════════════════
 //  SUSTITUCIÓN DE COTIZACIÓN ACEPTADA
@@ -4681,78 +4805,6 @@ async function escribirACobros(h) {
       });
     })();
   }catch(e){}
-</script>
-<!-- ============================================================
-     MS UNIVERSE · Lanzador minimalista entre apps
-     Pega este bloque COMPLETO (incluido el <script> del final)
-     justo ANTES de </body> en cada app:
-       altapacientes · cotizador · agenda · cobros · paquetes
-     Es el MISMO código en todas. Detecta sola en cuál estás
-     y la marca. En reposo es solo un círculo "MS".
-     ============================================================ -->
-<div id="ms-switch">
-  <div class="ms-menu">
-    <a data-app="altapacientes" href="https://altapacientes.miguelsotomd.com">Alta</a>
-    <a data-app="cotizador"     href="https://cotizador.miguelsotomd.com">Cotizador</a>
-    <a data-app="agenda"        href="https://agenda.miguelsotomd.com">Agenda</a>
-    <a data-app="cobros"        href="https://cobros.miguelsotomd.com">Cobros</a>
-    <a data-app="paquetes"      href="https://paquetes.miguelsotomd.com">Paquetes</a>
-  </div>
-  <button class="ms-trigger" type="button" aria-label="Cambiar de app">
-    <span class="ms-mark">MS</span>
-  </button>
-</div>
-
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap');
-  /* Posición: por defecto abajo-derecha. Para moverlo cambia bottom/right.
-     Abajo-izquierda: left:20px; right:auto;  Arriba-derecha: top:20px; bottom:auto; */
-  #ms-switch{ position:fixed; bottom:20px; right:20px; z-index:99999;
-    font-family:'Jost',-apple-system,system-ui,sans-serif; display:flex;
-    flex-direction:column; align-items:flex-end; gap:10px; }
-
-  #ms-switch .ms-trigger{ width:48px; height:48px; border-radius:50%; cursor:pointer;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.35);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 10px 28px -10px rgba(0,0,0,.6); transition:transform .3s, border-color .3s;
-    display:flex; align-items:center; justify-content:center; padding:0; }
-  #ms-switch .ms-trigger:hover{ border-color:rgba(161,148,135,.7); }
-  #ms-switch .ms-mark{ font-size:15px; font-weight:400; letter-spacing:.12em; color:#F4F2F1; }
-  #ms-switch.open .ms-trigger{ transform:rotate(90deg); border-color:#A19487; }
-
-  #ms-switch .ms-menu{ display:flex; flex-direction:column; align-items:flex-end; gap:7px;
-    opacity:0; pointer-events:none; transform:translateY(8px); transition:opacity .28s, transform .28s; }
-  #ms-switch.open .ms-menu{ opacity:1; pointer-events:auto; transform:translateY(0); }
-  #ms-switch .ms-menu a{ text-decoration:none; color:#F4F2F1; font-size:12.5px; font-weight:300;
-    letter-spacing:.14em; text-transform:uppercase; padding:9px 16px; border-radius:999px;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.22);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 8px 22px -12px rgba(0,0,0,.6); white-space:nowrap; transition:background .25s,color .25s; }
-  #ms-switch .ms-menu a:hover{ background:rgba(161,148,135,.18); color:#fff; }
-  #ms-switch .ms-menu a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
-</style>
-
-<script>
-  (function(){
-    function markActive(){
-      var box = document.getElementById('ms-switch'); if(!box) return;
-      var sub = location.hostname.split('.')[0];
-      box.querySelectorAll('.ms-menu a').forEach(function(a){
-        if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
-      });
-    }
-    if (document.readyState !== 'loading') markActive();
-    else document.addEventListener('DOMContentLoaded', markActive);
-
-    // Delegación en document: funciona aunque el bloque se pegue en cualquier parte
-    document.addEventListener('click', function(e){
-      var box = document.getElementById('ms-switch'); if(!box) return;
-      var onTrigger = e.target.closest && e.target.closest('.ms-trigger');
-      var insideBox = e.target.closest && e.target.closest('#ms-switch');
-      if (onTrigger){ e.stopPropagation(); box.classList.toggle('open'); }
-      else if (!insideBox){ box.classList.remove('open'); }
-    });
-  })();
 </script>
 <!-- ===================== fin lanzador MS Universe ===================== -->
 </body>
