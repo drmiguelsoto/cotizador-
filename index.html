@@ -740,11 +740,15 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
       <label for="descuento-iny" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Inyectables (%)</label>
       <input type="number" id="descuento-iny" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px">
+      <label for="descuento-energy" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Energy Devices (%)</label>
+      <input type="number" id="descuento-energy" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
+    </div>
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
       <label for="descuento" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Descuento General (%)</label>
       <input type="number" id="descuento" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
-    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios e inyectables se descuentan primero (solo afectan la parte del Dr., no Renasté). El descuento general se aplica al total después.</div>
+    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios, inyectables y energy devices se descuentan primero (afectan la parte del Dr.). El descuento general se aplica al total después.</div>
 
     <!-- Precio Objetivo -->
     <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
@@ -2249,6 +2253,7 @@ function renderQuote() {
   const disc = parseFloat(document.getElementById('descuento').value)||0;
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
   const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
+  const energyDisc = parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
 
   // Selection bar update
   updateSelBar();
@@ -2417,9 +2422,15 @@ function renderQuote() {
   }, 0);
   var inyDiscAmt = totIny * inyDisc / 100;
   grandSub = grandSub - inyDiscAmt;
+  // Descuento de energy devices: mismo patrón que inyectables.
+  var totEnergy = moduleItems.reduce(function(s,it){
+    return s + (it.module === 'energy' ? (it.precio||0)*(it.qty||1) : 0);
+  }, 0);
+  var energyDiscAmt = totEnergy * energyDisc / 100;
+  grandSub = grandSub - energyDiscAmt;
   var discAmt = grandSub*disc/100;
   var grandTot = grandSub-discAmt;
-  if(honDisc>0 || disc>0 || inyDisc>0){
+  if(honDisc>0 || disc>0 || inyDisc>0 || energyDisc>0){
     var bruto = totHon2 + totHosp + totModulos;
     html+='<div class="sub-line"><span>Subtotal Bruto</span><span>'+fmt(bruto)+'</span></div>';
     if(honDisc>0){
@@ -2427,6 +2438,9 @@ function renderQuote() {
     }
     if(inyDisc>0){
       html+='<div class="sub-line disc"><span>Descuento Inyectables ('+inyDisc+'%)</span><span>− '+fmt(inyDiscAmt)+'</span></div>';
+    }
+    if(energyDisc>0){
+      html+='<div class="sub-line disc"><span>Descuento Energy Devices ('+energyDisc+'%)</span><span>− '+fmt(energyDiscAmt)+'</span></div>';
     }
     if(disc>0){
       html+='<div class="sub-line disc"><span>Descuento General ('+disc+'%)</span><span>− '+fmt(discAmt)+'</span></div>';
@@ -2479,9 +2493,11 @@ function updateSelBar() {
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
   const disc = parseFloat(document.getElementById('descuento').value)||0;
   const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
+  const energyDisc = parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
   const honNet = honSub * (1 - honDisc/100);
   const inySubBar = moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
-  const grandSub = honNet + restSub - (inySubBar * inyDisc/100);
+  const energySubBar = moduleItems.reduce(function(s,it){ return s + (it.module==='energy' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
+  const grandSub = honNet + restSub - (inySubBar * inyDisc/100) - (energySubBar * energyDisc/100);
   const grandTot = grandSub * (1 - disc/100);
   tot.textContent = fmt(grandTot);
 }
@@ -2629,13 +2645,16 @@ async function saveQuote(){
   var disc=parseFloat(document.getElementById('descuento').value)||0;
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
   var inyDisc=parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
+  var energyDisc=parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
   var honSub=0, restSub=0;
   selected.forEach(function(s){Object.keys(s.breakdown).forEach(function(k){if(s.breakdown[k].on){if(k==='hon')honSub+=s.breakdown[k].v;else restSub+=s.breakdown[k].v;}});});
   restSub+=extras.reduce(function(s,e){return s+e.p;},0);
   restSub+=moduleItems.reduce(function(s,it){ return s + (it.precio||0) * (it.qty||1); }, 0);
   var inySub=moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
   var inyDiscAmt = inySub * inyDisc/100;
-  var total=(honSub*(1-honDisc/100)+restSub-inyDiscAmt)*(1-disc/100);
+  var energySub=moduleItems.reduce(function(s,it){ return s + (it.module==='energy' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
+  var energyDiscAmt = energySub * energyDisc/100;
+  var total=(honSub*(1-honDisc/100)+restSub-inyDiscAmt-energyDiscAmt)*(1-disc/100);
   var ahora = new Date();
   var session = (typeof _authGetSession === 'function') ? _authGetSession() : null;
 
@@ -2681,6 +2700,7 @@ async function saveQuote(){
     descuento:disc,
     descuentoHon:honDisc,
     descuentoIny:inyDisc,
+    descuentoEnergy:energyDisc,
     total:total,
     status:'borrador',
     sustituyeA: _sustituyendoA || '',
@@ -3098,6 +3118,7 @@ function loadQuote(i){
   document.getElementById('descuento').value=h.descuento||0;
   document.getElementById('descuento-hon').value=h.descuentoHon||0;
   var _elIny=document.getElementById('descuento-iny'); if(_elIny) _elIny.value=h.descuentoIny||0;
+  var _elEnergy=document.getElementById('descuento-energy'); if(_elEnergy) _elEnergy.value=h.descuentoEnergy||0;
   _selectedPatientId=h.pacienteId||'';
   selected=JSON.parse(JSON.stringify(h.selected||[]));
   selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
@@ -3190,6 +3211,7 @@ function resetForm(){
     document.getElementById('descuento').value=0;
     document.getElementById('descuento-hon').value=0;
     var _elIny2=document.getElementById('descuento-iny'); if(_elIny2) _elIny2.value=0;
+    var _elEnergy2=document.getElementById('descuento-energy'); if(_elEnergy2) _elEnergy2.value=0;
     qCounter=parseInt(localStorage.getItem('ms_qc')||'1');
     updateQNum();buildProcsList();
     ['q-nombre','q-fnac','q-edad'].forEach(function(id){document.getElementById(id).textContent='—';});
@@ -4566,6 +4588,7 @@ function calcHonorariosTotal(h) {
   var sel = h.selected || [];
   var honDisc = h.descuentoHon || 0;
   var inyDisc = h.descuentoIny || 0;
+  var energyDisc = h.descuentoEnergy || 0;
   // Honorarios de cirugías (con descuento de honorarios)
   var honBruto = sel.reduce(function(sum, s) {
     return sum + (s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0);
@@ -4576,6 +4599,7 @@ function calcHonorariosTotal(h) {
     if (_isItemDr(it.module, it.cat, it.n)) {
       var importe = (it.precio || 0) * (it.qty || 1);
       if (it.module === 'inyectables') importe = importe * (1 - inyDisc / 100);
+      if (it.module === 'energy') importe = importe * (1 - energyDisc / 100);
       return sum + importe;
     }
     return sum;
