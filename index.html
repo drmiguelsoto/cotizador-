@@ -2195,7 +2195,8 @@ function _objTotals(){
       if(s.breakdown[k].on){ if(k === 'hon') honSub += s.breakdown[k].v; else restSub += s.breakdown[k].v; }
     });
   });
-  restSub += extras.reduce(function(a,e){ return a + (e.p || 0); }, 0);
+  honSub += extras.reduce(function(a,e){ return a + (e.hon ? (e.p || 0) : 0); }, 0);
+  restSub += extras.reduce(function(a,e){ return a + (e.hon ? 0 : (e.p || 0)); }, 0);
   restSub += moduleItems.reduce(function(a,it){ return a + (it.precio || 0) * (it.qty || 1); }, 0);
   return { hon: honSub, rest: restSub, bruto: honSub + restSub };
 }
@@ -2280,7 +2281,7 @@ function renderQuote() {
   const emptyNoteTh   = multi ? '<th></th>' : '';
 
   // ── Section 1: Honorarios ──
-  if (selected.length) {
+  if (selected.length || extras.some(function(e){return e.hon;})) {
     html += '<div class="q-sec-title">Honorarios Equipo Quirúrgico</div>';
     html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>'+emptyNoteTh+'</tr></thead><tbody>';
     selected.forEach(function(s) {
@@ -2290,7 +2291,11 @@ function renderQuote() {
       html += '<td class="r">'+(bk.hon.on?fmt(bk.hon.v):'<span class="strike">'+fmt(bk.hon.v)+'</span>')+'</td>';
       html += '<td class="r">'+(bk.hon.on?fmt(honAmt):fmt(0))+'</td>'+emptyNoteCell+'</tr>';
     });
-    const totHon = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0);
+    extras.forEach(function(e){
+      if(!e.hon) return;
+      html += '<tr><td>1</td><td>'+escapeHtml(e.n)+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
+    });
+    const totHon = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
     const honDiscAmt = totHon * honDisc / 100;
     const totHonNet = totHon - honDiscAmt;
     if (honDisc > 0) {
@@ -2312,11 +2317,11 @@ function renderQuote() {
   var keys = ['hosp','vpo','vpa','faja','impl','cons'];
   var labels = {'hosp':'Noche de Hospitalización (IVA inc.)','vpo':'VPO','vpa':'VPA','faja':'Faja','impl':'Implantes','cons':'Consumibles'};
   var totHosp = 0;
-  var totHon2 = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0);
+  var totHon2 = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
   var honDiscAmt2 = totHon2 * honDisc / 100;
   var totHonNet2 = totHon2 - honDiscAmt2;
 
-  if (selected.length || extras.length) {
+  if (selected.length || extras.some(function(e){return !e.hon;})) {
     html += '<div class="q-sec-title">Gastos de Hospital &nbsp;·&nbsp; Tiempo Qx &nbsp;·&nbsp; Anestesia</div>';
     html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>';
     if(multi) html+='<th class="r">Nota</th>';
@@ -2353,6 +2358,7 @@ function renderQuote() {
     });
 
     extras.forEach(function(e,i) {
+      if(e.hon) return;
       html+='<tr><td>1</td><td>'+e.n+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
     });
 
@@ -2360,7 +2366,7 @@ function renderQuote() {
       return s + (x.breakdown.qx.on?x.breakdown.qx.v:0)
                + (x.breakdown.anest.on?x.breakdown.anest.v:0)
                + keys.reduce(function(ss,k){return ss+(x.breakdown[k]&&x.breakdown[k].on?x.breakdown[k].v:0);},0);
-    },0) + extras.reduce(function(s,e){return s+e.p;},0);
+    },0) + extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
 
     html+='<tr class="stotal"><td colspan="3" style="text-align:right">Total Gastos de Hospital:</td><td class="r">'+fmt(totHosp)+'</td>'+emptyNoteCell+'</tr>';
     html+='</tbody></table>';
@@ -2487,7 +2493,8 @@ function updateSelBar() {
       }
     });
   });
-  restSub += extras.reduce(function(s,e){return s+e.p;},0);
+  honSub += extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
+  restSub += extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
   // Sumar items de módulos no-quirúrgicos (precio * cantidad)
   restSub += moduleItems.reduce(function(s,it){ return s + (it.precio||0) * (it.qty||1); }, 0);
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
@@ -2555,9 +2562,10 @@ function buildBreakdownPanels(grandSub, disc) {
   html += '<div class="extras-section">';
   html += '<div class="extras-title">Conceptos adicionales</div>';
   extras.forEach(function(e,i) {
-    html += '<div class="extra-row"><span class="extra-name">'+escapeHtml(e.n)+'</span><span class="extra-amt">'+fmt(e.p)+'</span><span class="extra-del" data-action="remove-extra" data-idx="'+i+'">✕</span></div>';
+    var _honTag = e.hon ? ' <span style="font-size:8px;letter-spacing:.5px;background:var(--black);color:#fff;padding:1px 5px;border-radius:3px;vertical-align:middle">HONORARIO</span>' : '';
+    html += '<div class="extra-row"><span class="extra-name">'+escapeHtml(e.n)+_honTag+'</span><span class="extra-amt">'+fmt(e.p)+'</span><span class="extra-del" data-action="remove-extra" data-idx="'+i+'">✕</span></div>';
   });
-  html += '<div class="add-extra"><input type="text" id="ex-n" placeholder="Descripción"><input type="text" id="ex-p" placeholder="$" style="max-width:90px"><button class="btn-add-extra" onclick="addExtra()">+ Añadir</button></div>';
+  html += '<div class="add-extra"><input type="text" id="ex-n" placeholder="Descripción"><input type="text" id="ex-p" placeholder="$" style="max-width:90px"><label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mid);cursor:pointer;white-space:nowrap"><input type="checkbox" id="ex-hon" style="cursor:pointer;margin:0">Honorario</label><button class="btn-add-extra" onclick="addExtra()">+ Añadir</button></div>';
   html += '</div>';
 
   html += '</div>'; // customizer
@@ -2581,9 +2589,12 @@ function addExtra() {
   var n = document.getElementById('ex-n').value.trim();
   var p = parseFloat(document.getElementById('ex-p').value.replace(/[^0-9.]/g,''));
   if(!n||isNaN(p)){toast('Ingresa nombre y precio válidos.','error');return;}
-  extras.push({n:n,p:p});
+  var _elHon = document.getElementById('ex-hon');
+  var esHon = _elHon ? !!_elHon.checked : false;
+  extras.push({n:n,p:p,hon:esHon});
   document.getElementById('ex-n').value='';
   document.getElementById('ex-p').value='';
+  if(_elHon) _elHon.checked=false;
   renderQuote();
 }
 
@@ -2648,7 +2659,8 @@ async function saveQuote(){
   var energyDisc=parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
   var honSub=0, restSub=0;
   selected.forEach(function(s){Object.keys(s.breakdown).forEach(function(k){if(s.breakdown[k].on){if(k==='hon')honSub+=s.breakdown[k].v;else restSub+=s.breakdown[k].v;}});});
-  restSub+=extras.reduce(function(s,e){return s+e.p;},0);
+  honSub+=extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
+  restSub+=extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
   restSub+=moduleItems.reduce(function(s,it){ return s + (it.precio||0) * (it.qty||1); }, 0);
   var inySub=moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
   var inyDiscAmt = inySub * inyDisc/100;
@@ -3228,7 +3240,8 @@ function copyEmail(){
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
   var totHon=0,totHosp=0;
   selected.forEach(function(s){var bk=s.breakdown;totHon+=(bk.hon.on?bk.hon.v:0);Object.keys(bk).filter(function(k){return k!=='hon';}).forEach(function(k){if(bk[k].on)totHosp+=bk[k].v;});});
-  totHosp+=extras.reduce(function(s,e){return s+e.p;},0);
+  totHon+=extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
+  totHosp+=extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
   var honDiscAmt=totHon*honDisc/100;
   var totHonNet=totHon-honDiscAmt;
   var sub=totHonNet+totHosp;
@@ -4604,8 +4617,10 @@ function calcHonorariosTotal(h) {
     }
     return sum;
   }, 0);
+  // Honorarios extra (conceptos adicionales marcados como Honorario), con descuento de honorarios.
+  var honExtras = (h.extras || []).reduce(function(sum, e){ return sum + (e.hon ? (e.p || 0) : 0); }, 0) * (1 - honDisc / 100);
   // El descuento general se aplica al total; aquí reportamos el monto antes de descuento general.
-  return honCirugias + honModulos;
+  return honCirugias + honModulos + honExtras;
 }
 
 // ── PAQUETES PREPAGADOS ──
