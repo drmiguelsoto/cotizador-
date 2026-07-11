@@ -2828,10 +2828,11 @@ function marcarAceptada(i) {
   if (!h || h.status === 'aceptada') return;
   _accepting = true;
 
-  // ── GUARDIA DE ACEPTACIÓN ──
-  // Si el paciente ya tiene otra cotización aceptada CON SALDO PENDIENTE,
-  // frenamos y ofrecemos: reemplazar (sustituir) o aceptar como adicional.
-  _buscarCotizacionPreviaPendiente(h, function(previa){
+  // Salvaguarda: pase lo que pase, _accepting nunca queda atascado (libera en 20s).
+  var _safety = setTimeout(function(){ _accepting = false; }, 20000);
+
+  var proceder = function(previa){
+    clearTimeout(_safety);
     if (previa) {
       _mostrarGuardiaDialog(h, previa, function(decision){
         if (decision === 'cancelar') { _accepting = false; return; }
@@ -2846,7 +2847,15 @@ function marcarAceptada(i) {
         function(){ _accepting = false; }
       );
     }
-  });
+  };
+
+  // El GUARDIA NUNCA debe bloquear la aceptación: cualquier fallo → flujo normal.
+  try {
+    _buscarCotizacionPreviaPendiente(h, proceder);
+  } catch (e) {
+    console.warn('[Guardia] Error, se procede con aceptación normal:', e);
+    proceder(null);
+  }
 }
 
 // Ejecuta la aceptación real (la confirmación ya se dio en el guardia).
@@ -2898,54 +2907,43 @@ function _ejecutarAceptacion(i) {
 // Busca una cotización previa del MISMO paciente que esté aceptada y con saldo
 // pendiente (no liquidada, no sustituida). Hace un fetch fresco de estados de
 // pago. Devuelve la más reciente vía cb(previa) o cb(null) si no hay / falla.
-async function _buscarCotizacionPreviaPendiente(h, cb) {
-  // Refrescar estados de pago (fetch fresco al gateway)
-  var estados = null;
-  if (COBROS_GATEWAY_URL && COBROS_GATEWAY_URL !== 'PEGAR_URL_DEL_DEPLOY_AQUI') {
-    try {
-      var r = await fetch(COBROS_GATEWAY_URL + '?action=estadoCotizaciones', { redirect: 'follow' });
-      var data = await r.json();
-      if (data && data.ok && data.estados) {
-        estados = data.estados;
-        _estadosPago = estados;                       // refrescar cache global
-        if (typeof renderHistory === 'function') renderHistory();
-      }
-    } catch (e) {
-      console.warn('[Guardia] No se pudieron cargar estados de pago:', e.message);
-    }
+// Busca una cotización previa del MISMO paciente aceptada y con saldo pendiente.
+// USA EL CACHE _estadosPago (refrescado al abrir el historial y al enfocar la
+// ventana) — NO hace fetch en el momento de aceptar, para no bloquear NUNCA la
+// aceptación. Si no hay datos en cache, no frena (flujo normal, seguro).
+function _buscarCotizacionPreviaPendiente(h, cb) {
+  try {
+    var estados = _estadosPago || null;
+    if (!estados || !Object.keys(estados).length) { cb(null); return; }
+
+    var pid        = String(h.pacienteId || '').trim();
+    var nombreNorm = quitarAcentos(String(h.nombre || '')).toLowerCase().trim();
+
+    var candidatas = qHistory.filter(function(q){
+      if (!q || q.id === h.id) return false;
+      if (q.status !== 'aceptada') return false;
+      var mismoPac = (pid && q.pacienteId)
+        ? (String(q.pacienteId).trim() === pid)
+        : (quitarAcentos(String(q.nombre || '')).toLowerCase().trim() === nombreNorm);
+      if (!mismoPac) return false;
+      var ep = estados[q.id];
+      if (!ep) return false;
+      var e = quitarAcentos(String(ep.estadoPago || '')).toLowerCase();
+      if (e.indexOf('liquidad') >= 0) return false;
+      if (e.indexOf('sustitu')  >= 0) return false;
+      return (Number(ep.saldo) || 0) > 0.01;
+    });
+
+    if (!candidatas.length) { cb(null); return; }
+    candidatas.sort(function(a, b){
+      var fa = a.fechaISO || '', fb = b.fechaISO || '';
+      return fa < fb ? 1 : (fa > fb ? -1 : 0);
+    });
+    cb(candidatas[0]);
+  } catch (e) {
+    console.warn('[Guardia] Error al buscar previa, se procede normal:', e);
+    cb(null);
   }
-  // Sin datos de saldo no podemos decidir con seguridad → no frenar (flujo normal)
-  if (!estados) { cb(null); return; }
-
-  // Identificar al paciente de h (por PacienteId si existe; si no, por nombre normalizado)
-  var pid        = String(h.pacienteId || '').trim();
-  var nombreNorm = quitarAcentos(String(h.nombre || '')).toLowerCase().trim();
-
-  var candidatas = qHistory.filter(function(q){
-    if (!q || q.id === h.id) return false;            // no ella misma
-    if (q.status !== 'aceptada') return false;        // solo aceptadas
-    // mismo paciente
-    var mismoPac = (pid && q.pacienteId)
-      ? (String(q.pacienteId).trim() === pid)
-      : (quitarAcentos(String(q.nombre || '')).toLowerCase().trim() === nombreNorm);
-    if (!mismoPac) return false;
-    // estado de pago: con saldo pendiente (no liquidada, no sustituida)
-    var ep = estados[q.id];
-    if (!ep) return false;
-    var e = quitarAcentos(String(ep.estadoPago || '')).toLowerCase();
-    if (e.indexOf('liquidad') >= 0) return false;     // ya pagada → no frenar
-    if (e.indexOf('sustitu')  >= 0) return false;     // ya sustituida → no frenar
-    return (Number(ep.saldo) || 0) > 0.01;            // debe quedar saldo
-  });
-
-  if (!candidatas.length) { cb(null); return; }
-
-  // Más reciente primero (por fechaISO)
-  candidatas.sort(function(a, b){
-    var fa = a.fechaISO || '', fb = b.fechaISO || '';
-    return fa < fb ? 1 : (fa > fb ? -1 : 0);
-  });
-  cb(candidatas[0]);
 }
 
 // Modal de decisión: reemplazar (sustituir) vs cirugía adicional vs cancelar.
