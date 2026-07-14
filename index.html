@@ -1879,6 +1879,30 @@ function recalcDiscounts(s, idx) {
   s.breakdown.vpa.on = isFirst && p.vpa > 0;
 }
 
+// La noche de hospitalización es un cargo ÚNICO por evento quirúrgico, no por
+// cirugía. Al combinar varias cirugías se cobra UNA sola noche: la de mayor valor.
+// Esta función activa esa y desactiva las demás. (El usuario puede reactivar otra
+// manualmente en el customizer si de verdad requiere 2 noches.)
+function _ajustarNocheHospital() {
+  var maxIdx = -1, maxVal = 0;
+  selected.forEach(function(s, i){
+    var bk = s.breakdown && s.breakdown.hosp;
+    var v = bk ? (bk.v || 0) : 0;
+    if (v > maxVal) { maxVal = v; maxIdx = i; }
+  });
+  selected.forEach(function(s, i){
+    if (s.breakdown && s.breakdown.hosp) {
+      s.breakdown.hosp.on = (i === maxIdx && (s.breakdown.hosp.v || 0) > 0);
+    }
+  });
+}
+
+// Recalcula descuentos por posición y ajusta la noche de hospital (una sola).
+function _recalcSeleccion() {
+  selected.forEach(function(s,i){ recalcDiscounts(s,i); });
+  _ajustarNocheHospital();
+}
+
 // ── INIT ──
 window.addEventListener('DOMContentLoaded', function() {
   // ── AUTH ── Primero todo: el gate cubre la UI hasta autenticarse.
@@ -2117,11 +2141,11 @@ function makeProcRow(proc) {
     if (idx>=0) {
       selected.splice(idx,1);
       selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
-      selected.forEach(function(s,i){ recalcDiscounts(s,i); });
+      _recalcSeleccion();
     } else {
       selected.push({proc:proc, breakdown:makeBreakdown(proc, selected.length), expanded:true});
       selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
-      selected.forEach(function(s,i){ recalcDiscounts(s,i); });
+      _recalcSeleccion();
     }
     buildProcsList();
     renderQuote();
@@ -2518,7 +2542,7 @@ function buildBreakdownPanels(grandSub, disc) {
   let html = '<div class="customizer">';
   if (selected.length) {
     html += '<div class="customizer-title">✎ Personalizar Desglose de Cirugía</div>';
-    html += '<div class="customizer-hint">Click en cualquier renglón para activar/desactivar el componente (ej. Faja, VPA). El total se actualiza automáticamente.</div>';
+    html += '<div class="customizer-hint">Click en cualquier renglón para activar/desactivar un componente. Ej: si con una sola faja cubres varias cirugías, desactiva las fajas que no uses. El total se actualiza solo.</div>';
     html += '<div class="sel-procs">';
 
     selected.forEach(function(s, idx) {
@@ -2580,7 +2604,7 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c
 function removeProc(idx) {
   selected.splice(idx,1);
   selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
-  selected.forEach(function(s,i){recalcDiscounts(s,i);});
+  _recalcSeleccion();
   buildProcsList();
   renderQuote();
 }
@@ -3132,7 +3156,7 @@ function loadQuote(i){
   _selectedPatientId=h.pacienteId||'';
   selected=JSON.parse(JSON.stringify(h.selected||[]));
   selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
-  selected.forEach(function(s,i){recalcDiscounts(s,i);});
+  _recalcSeleccion();
   moduleItems=JSON.parse(JSON.stringify(h.moduleItems||[]));
   extras=JSON.parse(JSON.stringify(h.extras||[]));
   document.getElementById('q-num').textContent=h.id;
