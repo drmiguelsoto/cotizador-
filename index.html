@@ -1881,8 +1881,8 @@ function recalcDiscounts(s, idx) {
 
 // La noche de hospitalización es un cargo ÚNICO por evento quirúrgico, no por
 // cirugía. Al combinar varias cirugías se cobra UNA sola noche: la de mayor valor.
-// Esta función activa esa y desactiva las demás. (El usuario puede reactivar otra
-// manualmente en el customizer si de verdad requiere 2 noches.)
+// Esta función activa esa y desactiva las demás. (Se puede reactivar otra a mano
+// en el customizer si de verdad se requieren 2 noches.)
 function _ajustarNocheHospital() {
   var maxIdx = -1, maxVal = 0;
   selected.forEach(function(s, i){
@@ -4650,9 +4650,22 @@ function calcHonorariosTotal(h) {
 // crea UN paquete prepagado en el gateway (cabecera + items). Cada item lleva
 // su cantidad = qty del renglón (2 Botox → 2 redenciones). No cobra: el cobro 100%
 // lo hace Cobros con sus reglas. Se dispara al aceptar, junto con escribirACobros.
+// Cuenta cuántas sesiones ampara el NOMBRE de un tratamiento ("10 sesiones" → 10).
+// Los paquetes de sesiones (Fibrosis Zero, PRUC) vienen como UN renglón (qty=1)
+// cuyo nombre lleva el número de sesiones, y cada sesión es una redención aparte.
+// Si el nombre no menciona sesiones (ej. Botox), devuelve 1 y manda la qty tal cual.
+function _sesionesDeNombre(nombre) {
+  var s = (typeof quitarAcentos === 'function' ? quitarAcentos(String(nombre || '')) : String(nombre || '')).toLowerCase();
+  var m = s.match(/(\d+)\s*sesion/);
+  return m ? Math.max(1, parseInt(m[1], 10) || 1) : 1;
+}
+
 async function _crearPrepagadoSiAplica(h) {
   var items = (h.moduleItems || []).filter(function(it){ return it.prepagado; });
-  if (!items.length) return;   // no hay prepagados en esta cotización
+  if (!items.length) {
+    console.log('[Prepagado] La cotización ' + (h && h.id) + ' no tiene renglones marcados como paquete prepagado — no se crea paquete.');
+    return;
+  }
   if (!COBROS_GATEWAY_URL || COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
     console.warn('[Prepagado] Gateway URL no configurada.');
     return;
@@ -4665,7 +4678,10 @@ async function _crearPrepagadoSiAplica(h) {
     pacienteNombre: h.nombre || '',
     creadoPor:      session ? session.email : '',
     items: items.map(function(it){
-      return { tratamiento: it.n, cantidad: Math.max(1, parseInt(it.qty, 10) || 1) };
+      var _qty  = Math.max(1, parseInt(it.qty, 10) || 1);
+      var _ses  = _sesionesDeNombre(it.n);
+      // Un renglón "Fibrosis Zero Big 10 sesiones" (qty 1) = 10 redenciones.
+      return { tratamiento: it.n, cantidad: _qty * _ses };
     })
   };
   try {
