@@ -2909,7 +2909,7 @@ function _ejecutarAceptacion(i) {
       var quoteData = qHistory.find(function(q){ return q.id === quoteId; });
       if (quoteData) {
         if (h.sustituyeA && !quoteData.sustituyeA) quoteData.sustituyeA = h.sustituyeA;
-        await escribirACobros(quoteData);
+        await escribirACobros(quoteData, { incluirPaquetes: true });
         await _crearPrepagadoSiAplica(quoteData);
         if (quoteData.sustituyeA) { await _procesarSustitucion(quoteData); }
         if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1200);
@@ -4660,8 +4660,40 @@ function _sesionesDeNombre(nombre) {
   return m ? Math.max(1, parseInt(m[1], 10) || 1) : 1;
 }
 
+// ── PAQUETES DE SESIONES (Fibrosis Zero / PRUC) ──
+// Estos NO son "prepagados": son un tratamiento vendido por sesiones que se
+// consumen una por una. Viven en la pestaña "Paquetes" del Sheet sellado con
+// folio PAQ-####, los cobra Cobros y se redimen en la app de Paquetes.
+// El gateway (_registrarCotizacion) los crea cuando el payload trae `paquetesFZ`.
+// Contrato del gateway por cada elemento:
+//   { tratamiento, totalSesiones, qty, cirugiaPrincipal }
+//   qty = cuántas COPIAS del paquete (1 renglón "10 sesiones" = 1 paquete de 10).
+// OJO: el gateway hace appendRow SIN deduplicar → esto solo se manda al ACEPTAR,
+// nunca desde "↻ Cobros", para no crear paquetes duplicados.
+function _construirPaquetesFZ(h) {
+  var items = (h.moduleItems || []).filter(function(it){ return it.module === 'fibrosis'; });
+  if (!items.length) return [];
+  // Contexto útil: la cirugía principal de la cotización (FZ suele ir post-quirúrgico).
+  var cirugiaPrincipal = (h.selected && h.selected.length && h.selected[0] && h.selected[0].proc)
+    ? h.selected[0].proc.n : '';
+  var out = [];
+  items.forEach(function(it){
+    var ses = _sesionesDeNombre(it.n);
+    if (ses < 2) return;   // una sola sesión no es un paquete de sesiones
+    out.push({
+      tratamiento:      it.n,
+      totalSesiones:    ses,
+      qty:              Math.max(1, parseInt(it.qty, 10) || 1),
+      cirugiaPrincipal: cirugiaPrincipal
+    });
+  });
+  return out;
+}
+
 async function _crearPrepagadoSiAplica(h) {
-  var items = (h.moduleItems || []).filter(function(it){ return it.prepagado; });
+  // Los de Fibrosis Zero/PRUC van por la ruta de paquetes de sesiones (PAQ-####),
+  // NO por prepagados (PRE-####). Se excluyen aquí para no crear paquetes dobles.
+  var items = (h.moduleItems || []).filter(function(it){ return it.prepagado && it.module !== 'fibrosis'; });
   if (!items.length) {
     console.log('[Prepagado] La cotización ' + (h && h.id) + ' no tiene renglones marcados como paquete prepagado — no se crea paquete.');
     return;
@@ -4724,8 +4756,12 @@ function _asegurarPreciosCargados(timeoutMs) {
   });
 }
 
-// Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado)
-async function escribirACobros(h) {
+// Envía datos de cotización aceptada al Apps Script gateway (Sheet sellado).
+// opts.incluirPaquetes = true  → adjunta los paquetes de sesiones FZ/PRUC.
+//   Solo se usa al ACEPTAR: el gateway inserta los paquetes sin deduplicar, así que
+//   re-registrar ("↻ Cobros") NO debe mandarlos o crearía duplicados.
+async function escribirACobros(h, opts) {
+  opts = opts || {};
   if (COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
     console.warn('[Cobros] Gateway URL no configurada.');
     toast('⚠ Cobros Gateway no configurado — contactar al administrador.', 'error');
@@ -4768,10 +4804,12 @@ async function escribirACobros(h) {
   var _renasteLib = calcRenasteLiberable(h);
   console.log('[Cobros] HonorariosTotal:', _honTotal, '| RenasteRealCost:', _renasteReal, '| RenasteLiberable:', _renasteLib);
 
+  var _sessionCobros = (typeof _authGetSession === 'function') ? _authGetSession() : null;
   var payload = {
     cotizacionId:    h.id,
     pacienteId:      h.pacienteId || '',
     pacienteNombre:  h.nombre || '',
+    creadoPor:       _sessionCobros ? _sessionCobros.email : '',
     fechaAceptada:   h.fechaAceptada || new Date().toLocaleDateString('es-MX'),
     granTotal:       h.total || 0,
     honorariosTotal: _honTotal,
@@ -4792,6 +4830,15 @@ async function escribirACobros(h) {
     })
   };
 
+  // Paquetes de sesiones FZ/PRUC — solo al aceptar (ver nota de duplicados arriba).
+  if (opts.incluirPaquetes) {
+    var _paqFZ = _construirPaquetesFZ(h);
+    if (_paqFZ.length) {
+      payload.paquetesFZ = _paqFZ;
+      console.log('[Cobros] Paquetes de sesiones a crear:', JSON.stringify(_paqFZ));
+    }
+  }
+
   try {
     var r = await fetch(COBROS_GATEWAY_URL, {
       method: 'POST',
@@ -4809,6 +4856,14 @@ async function escribirACobros(h) {
     if (result.ok) {
       console.log('[Cobros] Cotización ' + h.id + ' registrada en Sistema de Cobros.');
       toast('✓ Cotización registrada en Sistema de Cobros.', 'success');
+      if (result.paquetes && result.paquetes.length) {
+        console.log('[Cobros] Paquetes de sesiones creados:', result.paquetes);
+        toast('✓ Paquete(s) de sesiones creado(s): ' + result.paquetes.join(', '), 'success');
+      }
+      if (result.aviso) {
+        console.warn('[Cobros] Aviso del gateway:', result.aviso);
+        toast('⚠ ' + result.aviso, 'error');
+      }
     } else {
       throw new Error(result.error || 'Error desconocido');
     }
