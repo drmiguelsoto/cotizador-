@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-06-20 · + Paquetes Prepagados (check por renglón en módulos) -->
+<!-- COTIZADOR · v2026-07-16b · Paquetes FZ (incl. 1 sesión) restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1846,6 +1846,14 @@ let qHistory = JSON.parse(localStorage.getItem('ms_qh')||'[]');
 let activeCat = null;                                          // category chip filter
 let activeModule = 'quirurgicos';                              // módulo activo en el dropdown
 let _sustituyendoA = null;                                     // COT original cuando estamos en modo sustitución
+
+// ── SELLO DE VERSIÓN ──
+// Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
+// (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
+var COTIZADOR_VERSION = 'v2026-07-16b · Paquetes FZ (incl. 1 sesión)';
+console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
+  (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
+  'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
 
 // ── PRICING LOGIC (unchanged) ──
 function makeBreakdown(p, idx) {
@@ -4678,8 +4686,11 @@ function _construirPaquetesFZ(h) {
     ? h.selected[0].proc.n : '';
   var out = [];
   items.forEach(function(it){
+    // Sesiones que ampara el nombre del tratamiento ("10 sesiones" → 10; "1 sesión" → 1).
     var ses = _sesionesDeNombre(it.n);
-    if (ses < 2) return;   // una sola sesión no es un paquete de sesiones
+    // TODO renglón de FZ/PRUC genera paquete, incluso el de UNA sesión: Cobros exige
+    // un paquete cotizado para poder cobrar por la línea de negocio "Paquetes".
+    // qty = cuántas COPIAS del paquete (2 x "Big 1 sesión" → 2 paquetes de 1 sesión).
     out.push({
       tratamiento:      it.n,
       totalSesiones:    ses,
