@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-07-16b · Paquetes FZ (incl. 1 sesión) restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-07-16c · Paquetes FZ consolidados restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1850,7 +1850,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-07-16b · Paquetes FZ (incl. 1 sesión)';
+var COTIZADOR_VERSION = 'v2026-07-16c · Paquetes FZ consolidados';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -2433,10 +2433,15 @@ function renderQuote() {
         html += '<tr>'
           + '<td><input type="number" min="1" value="'+(it.qty||1)+'" oninput="updateModuleQty('+rec.gi+',this.value)" style="width:46px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:3px 6px;font-size:11px;text-align:center;font-family:inherit;outline:none"></td>'
           + '<td>'+escapeHtml(it.n)+(it.cat ? '<span class="cat-tag">'+escapeHtml(it.cat)+'</span>' : '')
-            + '<label class="prepago-toggle" style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10px;letter-spacing:.3px;cursor:pointer;font-weight:'+(it.prepagado?'600':'400')+';color:'+(it.prepagado?'var(--green)':'var(--soft)')+'">'
-            + '<input type="checkbox" '+(it.prepagado?'checked':'')+' onchange="toggleModulePrepagado('+rec.gi+',this.checked)" style="accent-color:var(--green);cursor:pointer;margin:0;width:14px;height:14px">'
-            + (it.prepagado ? '📦 Paquete prepagado — se redime después' : 'Marcar como paquete prepagado')
-            + '</label>'
+            + (it.module === 'fibrosis'
+                // Fibrosis Zero / PRUC SIEMPRE genera paquete de sesiones (PAQ-####)
+                // al aceptar. No usa la casilla de prepagado (esa es para Buen Fin),
+                // así que se muestra un aviso en vez de un check que no hace nada.
+                ? '<span style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10px;letter-spacing:.3px;font-weight:600;color:var(--green)">📦 Paquete de sesiones — se crea solo al aceptar</span>'
+                : '<label class="prepago-toggle" style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10px;letter-spacing:.3px;cursor:pointer;font-weight:'+(it.prepagado?'600':'400')+';color:'+(it.prepagado?'var(--green)':'var(--soft)')+'">'
+                  + '<input type="checkbox" '+(it.prepagado?'checked':'')+' onchange="toggleModulePrepagado('+rec.gi+',this.checked)" style="accent-color:var(--green);cursor:pointer;margin:0;width:14px;height:14px">'
+                  + (it.prepagado ? '📦 Paquete prepagado — se redime después' : 'Marcar como paquete prepagado')
+                  + '</label>')
           + '</td>'
           + '<td class="r">'+fmt(it.precio||0)+'</td>'
           + '<td class="r">'+fmt(importe)+'</td>'
@@ -4688,13 +4693,18 @@ function _construirPaquetesFZ(h) {
   items.forEach(function(it){
     // Sesiones que ampara el nombre del tratamiento ("10 sesiones" → 10; "1 sesión" → 1).
     var ses = _sesionesDeNombre(it.n);
-    // TODO renglón de FZ/PRUC genera paquete, incluso el de UNA sesión: Cobros exige
-    // un paquete cotizado para poder cobrar por la línea de negocio "Paquetes".
-    // qty = cuántas COPIAS del paquete (2 x "Big 1 sesión" → 2 paquetes de 1 sesión).
+    var qty = Math.max(1, parseInt(it.qty, 10) || 1);
+    // UN SOLO PAQUETE POR RENGLÓN, con TODAS sus sesiones dentro (ses x qty).
+    // Importante: Cobros le asigna al paquete el GranTotal de la COTIZACIÓN, no un
+    // precio propio. Si mandáramos qty>1 (varias copias), Cobros mostraría un renglón
+    // por copia, CADA UNO con el total completo → riesgo de cobrar de más.
+    // Por eso siempre va qty:1 y las sesiones se consolidan.
+    // Ej: 2 x "Big 1 sesión" → 1 paquete de 2 sesiones (un cobro, dos redenciones).
+    //     2 x "Big 10 sesiones" → 1 paquete de 20 sesiones.
     out.push({
-      tratamiento:      it.n,
-      totalSesiones:    ses,
-      qty:              Math.max(1, parseInt(it.qty, 10) || 1),
+      tratamiento:      it.n + (qty > 1 ? ' \u00d7 ' + qty : ''),
+      totalSesiones:    ses * qty,
+      qty:              1,
       cirugiaPrincipal: cirugiaPrincipal
     });
   });
@@ -4704,9 +4714,15 @@ function _construirPaquetesFZ(h) {
 async function _crearPrepagadoSiAplica(h) {
   // Los de Fibrosis Zero/PRUC van por la ruta de paquetes de sesiones (PAQ-####),
   // NO por prepagados (PRE-####). Se excluyen aquí para no crear paquetes dobles.
-  var items = (h.moduleItems || []).filter(function(it){ return it.prepagado && it.module !== 'fibrosis'; });
+  var _marcados = (h.moduleItems || []).filter(function(it){ return it.prepagado; });
+  var items     = _marcados.filter(function(it){ return it.module !== 'fibrosis'; });
   if (!items.length) {
-    console.log('[Prepagado] La cotización ' + (h && h.id) + ' no tiene renglones marcados como paquete prepagado — no se crea paquete.');
+    var _fz = _marcados.length - items.length;
+    if (_fz > 0) {
+      console.log('[Prepagado] ' + (h && h.id) + ': los ' + _fz + ' renglón(es) de Fibrosis Zero/PRUC van por PAQUETES DE SESIONES (PAQ-####), no por prepagados (PRE-####). Esto es correcto — busca la línea "[Cobros] Paquetes de sesiones a crear".');
+    } else {
+      console.log('[Prepagado] La cotización ' + (h && h.id) + ' no tiene renglones marcados como paquete prepagado — no se crea prepagado.');
+    }
     return;
   }
   if (!COBROS_GATEWAY_URL || COBROS_GATEWAY_URL === 'PEGAR_URL_DEL_DEPLOY_AQUI') {
