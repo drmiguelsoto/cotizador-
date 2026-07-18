@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-07-16c · Paquetes FZ consolidados restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-07-17 · Cobros blindado + paquetes FZ restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1850,7 +1850,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-07-16c · Paquetes FZ consolidados';
+var COTIZADOR_VERSION = 'v2026-07-17 · Cobros blindado + paquetes FZ';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3055,6 +3055,7 @@ async function reRegistrarCobros(i){
     await escribirACobros(h);
     if (typeof cargarEstadosPago === 'function') setTimeout(cargarEstadosPago, 1500);
   } catch (e) {
+    console.error('[Cobros] Falló el re-registro de ' + h.id + ':', e);
     toast('⚠ No se pudo re-registrar ' + h.id + ': ' + e.message,'error');
   }
 }
@@ -4819,8 +4820,11 @@ async function escribirACobros(h, opts) {
   console.log('[Cobros] Quote:', h.id, '| selected:', sel.length, '| moduleItems:', (h.moduleItems||[]).length, '| extras:', (h.extras||[]).length);
   console.log('[Cobros] GH Renasté cargado:', !!(window.MS_PRICES && window.MS_PRICES.gh_renaste), '| items:', window.MS_PRICES && window.MS_PRICES.gh_renaste ? window.MS_PRICES.gh_renaste.length : 0);
   sel.forEach(function(s, idx) {
-    var gh = _findGHRenaste(s.proc.n);
-    console.log('[Cobros] Proc[' + idx + ']:', s.proc.n, '| hon.v:', s.breakdown.hon ? s.breakdown.hon.v : 'N/A', '| GH match:', gh ? 'SÍ' : 'NO');
+    // Acceso defensivo: las cotizaciones viejas pueden traer estructura incompleta.
+    var _pn = (s && s.proc && s.proc.n) ? s.proc.n : '';
+    var gh = _pn ? _findGHRenaste(_pn) : null;
+    var _hv = (s && s.breakdown && s.breakdown.hon) ? s.breakdown.hon.v : 'N/A';
+    console.log('[Cobros] Proc[' + idx + ']:', _pn || '(SIN proc.n ⚠)', '| hon.v:', _hv, '| GH match:', gh ? 'SÍ' : 'NO');
   });
   (h.moduleItems||[]).forEach(function(it, idx) {
     var esDr = _isItemDr(it.module, it.cat, it.n);
@@ -4848,9 +4852,11 @@ async function escribirACobros(h, opts) {
     driveUrl:        h.drive_url || '',
     driveFileId:     h.drive_file_id || '',
     detalle: sel.map(function(s, idx) {
-      var honBruto = s.breakdown.hon && s.breakdown.hon.on ? s.breakdown.hon.v : 0;
+      // Defensivo: cotizaciones antiguas pueden no traer proc/breakdown completos.
+      var _bkHon   = (s && s.breakdown && s.breakdown.hon) ? s.breakdown.hon : null;
+      var honBruto = (_bkHon && _bkHon.on) ? (Number(_bkHon.v) || 0) : 0;
       return {
-        procedimiento: s.proc.n,
+        procedimiento: (s && s.proc && s.proc.n) ? s.proc.n : '(procedimiento sin nombre)',
         honorarios:    honBruto * (1 - honDisc / 100),
         esPrincipal:   idx === 0 ? 'Sí' : 'No'
       };
