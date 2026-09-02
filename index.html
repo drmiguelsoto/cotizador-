@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-07-17 · Cobros blindado + paquetes FZ restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-09-02b · Precios via gateway (Sheet privado) restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -978,8 +978,8 @@ let CAT=[
 //  Reutiliza la API Key del proyecto My Project 21981.
 //  Las 6 pestañas se leen en una sola llamada (batchGet).
 // ══════════════════════════════════════════════════════
-const SHEETS_ID      = '1CRBWZZRfWTDxI1_m_O0BzIkE7QvwDOC7NEX_W-9XqKU';
-const SHEETS_API_KEY = 'AIzaSyCvTomBACh9AbgNx1JYYuKW9F1dp-OC6Wo'; // mismo que CAL_API_KEY
+// SHEETS_ID retirado: los precios ahora los sirve el gateway (Sheet privado).
+// SHEETS_API_KEY retirado: el cotizador ya no lee el Sheet directo (lo hace el gateway).
 // Los nombres son los EXACTOS como aparecen en el Sheets (no abreviaciones del resumen).
 const SHEETS_TABS = {
   quirurgicos:  'Quirúrgicos Zorvix',
@@ -1176,23 +1176,21 @@ function _parseModuleSheet(values) {
 // Si falla, conserva los precios hardcoded y avisa por toast.
 async function loadPricesFromSheets() {
   const tabKeys  = Object.keys(SHEETS_TABS);                  // ['quirurgicos', ...]
-  const tabNames = tabKeys.map(function(k){ return SHEETS_TABS[k]; });
-  const rangesQS = tabNames
-    .map(function(name){ return 'ranges=' + encodeURIComponent(name); })
-    .join('&');
-  const url = 'https://sheets.googleapis.com/v4/spreadsheets/'
-    + SHEETS_ID + '/values:batchGet?' + rangesQS
-    + '&key=' + SHEETS_API_KEY;
+  // Los precios ya NO se leen del Sheet directo (eso obligaba a tenerlo público).
+  // Ahora los sirve el gateway, que lee el Sheet PRIVADO con permisos de dueño y
+  // devuelve los valores crudos en el mismo formato (valueRanges), en el orden de
+  // SHEETS_TABS. El parseo de abajo es idéntico al de antes.
+  const url = COBROS_GATEWAY_URL + '?action=precios';
 
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { redirect: 'follow' });
     if (!r.ok) {
       const errText = await r.text().catch(function(){ return ''; });
       throw new Error('HTTP ' + r.status + (errText ? ' — ' + errText.slice(0,140) : ''));
     }
     const data = await r.json();
     if (!data.valueRanges || !Array.isArray(data.valueRanges)) {
-      throw new Error('Respuesta sin valueRanges');
+      throw new Error(data && data.error ? data.error : 'Respuesta sin valueRanges');
     }
 
     // El orden de valueRanges coincide con el orden de ranges en el query.
@@ -1850,7 +1848,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-07-17 · Cobros blindado + paquetes FZ';
+var COTIZADOR_VERSION = 'v2026-09-02b · Precios via gateway (Sheet privado)';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
