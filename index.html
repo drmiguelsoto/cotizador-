@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-09-02b · Precios via gateway (Sheet privado) restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-09-03 · Cirugía personalizada + precios via gateway restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -719,6 +719,7 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
       <input type="text" id="srch" placeholder="Buscar procedimiento..." oninput="filterProcs(this.value)">
       <button class="search-clear" id="srch-clear" onclick="clearSearch()" aria-label="Limpiar">✕</button>
     </div>
+    <button onclick="abrirCirugiaPersonalizada()" style="width:100%;margin:2px 0 8px;background:transparent;color:var(--mid);border:1px dashed var(--border);border-radius:var(--r);padding:9px;font-size:10.5px;letter-spacing:.8px;font-weight:600;cursor:pointer;font-family:inherit">+ CIRUGÍA PERSONALIZADA (fuera de catálogo)</button>
     <div class="cat-chips" id="cat-chips"></div>
     <div id="procs-list" style="flex:1"></div>
   </div>
@@ -1848,12 +1849,127 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-09-02b · Precios via gateway (Sheet privado)';
+var COTIZADOR_VERSION = 'v2026-09-03 · Cirugía personalizada + precios via gateway';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
 
 // ── PRICING LOGIC (unchanged) ──
+// ══════════════════════════════════════════════════════
+//  CIRUGÍA PERSONALIZADA (fuera de catálogo)
+//  Permite capturar una cirugía que no está en la lista de precios, con su
+//  desglose completo (los mismos 9 componentes del catálogo). Una vez agregada,
+//  se comporta IDÉNTICA a una del catálogo: mismo desglose en el PDF, mismo
+//  split Dr./Renasté, se registra igual en Cobros y el customizer la puede
+//  ajustar. Es para casos infrecuentes; no toca el flujo diario.
+// ══════════════════════════════════════════════════════
+
+// Abre el modal. Crea el overlay dinámicamente (no toca el HTML estático).
+function abrirCirugiaPersonalizada() {
+  // Si ya hay uno abierto, no duplicar.
+  if (document.getElementById('_cp-bg')) return;
+
+  var campos = [
+    { k:'hon',   label:'Honorarios Médicos',        ph:'80000' },
+    { k:'qx',    label:'Tiempo Quirúrgico',         ph:'35000' },
+    { k:'anest', label:'Anestesiología',            ph:'9000' },
+    { k:'hosp',  label:'Noche de Hospitalización',  ph:'3500' },
+    { k:'vpo',   label:'VPO (Valoración Preop.)',   ph:'1500' },
+    { k:'vpa',   label:'VPA (Valoración Preanest.)',ph:'1500' },
+    { k:'faja',  label:'Faja',                      ph:'0' },
+    { k:'impl',  label:'Implantes',                 ph:'0' },
+    { k:'cons',  label:'Consumibles',               ph:'0' }
+  ];
+
+  var filas = campos.map(function(c){
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      + '<label for="_cp-'+c.k+'" style="flex:1;font-size:11px;letter-spacing:.3px;color:var(--mid)">'+c.label+'</label>'
+      + '<span style="color:var(--mid);font-size:12px">$</span>'
+      + '<input type="number" id="_cp-'+c.k+'" min="0" step="1" placeholder="'+c.ph+'" '
+      + 'style="width:110px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:12px;font-family:inherit;text-align:right;outline:none;color:var(--black)">'
+      + '</div>';
+  }).join('');
+
+  var bg = document.createElement('div');
+  bg.id = '_cp-bg';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(3,7,7,.55);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+  bg.innerHTML =
+    '<div style="background:var(--white);border-radius:6px;max-width:460px;width:100%;box-shadow:var(--shadow-lg);overflow:hidden;font-family:inherit;margin:auto">' +
+      '<div style="background:var(--black);color:#fff;padding:14px 20px;font-size:11px;letter-spacing:1.5px;font-weight:700">✎ CIRUGÍA PERSONALIZADA (FUERA DE CATÁLOGO)</div>' +
+      '<div style="padding:20px">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+          '<label for="_cp-nombre" style="flex:0 0 auto;font-size:11px;letter-spacing:.3px;color:var(--mid)">Nombre</label>' +
+          '<input type="text" id="_cp-nombre" placeholder="Ej: Implantes Mamarios + Bra Postop" ' +
+          'style="flex:1;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-size:12px;font-family:inherit;outline:none;color:var(--black)">' +
+        '</div>' +
+        '<p style="font-size:10px;line-height:1.5;color:var(--mid);margin:0 0 14px">Captura los montos que apliquen. Los que dejes en blanco o 0 no aparecen en el desglose. Puedes ajustarlos después en «Personalizar Desglose».</p>' +
+        filas +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+          '<span style="font-size:12px;letter-spacing:.5px;color:var(--mid);font-weight:600">Total:</span>' +
+          '<span id="_cp-total" style="font-size:16px;font-weight:700;color:var(--black)">$0.00</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:9px;margin-top:16px">' +
+          '<button id="_cp-cancel" style="flex:1;background:var(--white);color:var(--mid);border:1px solid var(--border);border-radius:var(--r);padding:11px;font-size:11px;letter-spacing:1px;font-weight:600;cursor:pointer;font-family:inherit">CANCELAR</button>' +
+          '<button id="_cp-add" style="flex:2;background:var(--black);color:#fff;border:none;border-radius:var(--r);padding:11px;font-size:11px;letter-spacing:1px;font-weight:700;cursor:pointer;font-family:inherit">+ AGREGAR A LA COTIZACIÓN</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(bg);
+
+  // Recalcular total en vivo
+  function recalcTotal(){
+    var t = 0;
+    campos.forEach(function(c){
+      var el = document.getElementById('_cp-'+c.k);
+      t += Math.max(0, parseFloat(el && el.value) || 0);
+    });
+    var elt = document.getElementById('_cp-total');
+    if (elt) elt.textContent = fmt(t);
+  }
+  campos.forEach(function(c){
+    var el = document.getElementById('_cp-'+c.k);
+    if (el) el.addEventListener('input', recalcTotal);
+  });
+
+  function cerrar(){ if (bg && bg.parentNode) bg.parentNode.removeChild(bg); }
+  document.getElementById('_cp-cancel').onclick = cerrar;
+  bg.onclick = function(e){ if (e.target === bg) cerrar(); };
+
+  document.getElementById('_cp-add').onclick = function(){
+    var nombre = (document.getElementById('_cp-nombre').value || '').trim();
+    if (!nombre) { toast('Ponle un nombre a la cirugía personalizada.','error'); return; }
+
+    // Construir el 'proc' con la MISMA forma que un procedimiento del catálogo.
+    var proc = {
+      n:   nombre,
+      cat: 'Personalizada',
+      hon:   Math.max(0, parseFloat(document.getElementById('_cp-hon').value)   || 0),
+      qx:    Math.max(0, parseFloat(document.getElementById('_cp-qx').value)    || 0),
+      anest: Math.max(0, parseFloat(document.getElementById('_cp-anest').value) || 0),
+      hosp:  Math.max(0, parseFloat(document.getElementById('_cp-hosp').value)  || 0),
+      vpo:   Math.max(0, parseFloat(document.getElementById('_cp-vpo').value)   || 0),
+      vpa:   Math.max(0, parseFloat(document.getElementById('_cp-vpa').value)   || 0),
+      faja:  Math.max(0, parseFloat(document.getElementById('_cp-faja').value)  || 0),
+      impl:  Math.max(0, parseFloat(document.getElementById('_cp-impl').value)  || 0),
+      cons:  Math.max(0, parseFloat(document.getElementById('_cp-cons').value)  || 0),
+      _custom: true   // marca por si luego se quiere distinguir
+    };
+
+    var totalProc = proc.hon + proc.qx + proc.anest + proc.hosp + proc.vpo + proc.vpa + proc.faja + proc.impl + proc.cons;
+    if (totalProc <= 0) { toast('Captura al menos un monto mayor a 0.','error'); return; }
+
+    // Agregar igual que una cirugía del catálogo, y recalcular.
+    selected.push({ proc: proc, breakdown: makeBreakdown(proc, selected.length), expanded: true });
+    selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
+    _recalcSeleccion();
+    buildProcsList();
+    renderQuote();
+
+    cerrar();
+    toast('✓ Cirugía personalizada agregada.','success');
+  };
+}
+
 function makeBreakdown(p, idx) {
   const isFirst = idx === 0;
   // VPO y VPA son cargos ÚNICOS por paciente (no se repiten por procedimiento).
@@ -3916,7 +4032,7 @@ function subirPdfDriveCompartible(blob, fileName, isAceptada, callback) {
 //  4. Pegar abajo:
 // ══════════════════════════════════════════════════════
 const CAL_CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
-const CAL_API_KEY   = 'AIzaSyCvTomBACh9AbgNx1JYYuKW9F1dp-OC6Wo';
+const CAL_API_KEY   = 'PEGA_AQUI_TU_API_KEY_NUEVA';
 // Scope unificado para Calendar + Drive (drive completo, incluye drive.file).
 const CAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive';
 // Los 5 calendarios del Miguel Soto Universe. Cada uno se consulta en paralelo.
