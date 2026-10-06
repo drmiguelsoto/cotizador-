@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-09-03 · Cirugía personalizada + precios via gateway restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-10-06 · Hoja recomendaciones preop + cirugía personalizada restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -821,6 +821,7 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
     <button class="btn btn-d" onclick="saveQuote()"><span class="btn-icon">⌑</span>Guardar</button>
     <button class="btn btn-cal" id="btn-cal" onclick="importarDeAgenda()"><span class="btn-icon">📅</span>Agenda</button>
     <button class="btn btn-pdf" onclick="descargarPDF()"><span class="btn-icon">⎙</span>PDF</button>
+    <button class="btn btn-o" onclick="descargarRecomendaciones()"><span class="btn-icon">📋</span>Recomendaciones</button>
     <button class="btn btn-drive" id="btn-drive" onclick="guardarEnDrive()"><span class="btn-icon">☁</span><span id="drive-btn-txt">Drive</span></button>
     <button class="btn btn-wa" onclick="enviarWhatsApp()"><span class="btn-icon">💬</span>WhatsApp</button>
     <button class="btn btn-email" id="btn-email" onclick="enviarEmailConPDF()"><span class="btn-icon">✉</span><span id="email-btn-txt">Email + PDF</span></button>
@@ -1849,7 +1850,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-09-03 · Cirugía personalizada + precios via gateway';
+var COTIZADOR_VERSION = 'v2026-10-06 · Hoja recomendaciones preop + cirugía personalizada';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3567,6 +3568,268 @@ function capturar(card, callback) {
   });
 }
 
+// ══════════════════════════════════════════════════════
+//  RECOMENDACIONES PREOPERATORIAS (hoja personalizable en PDF)
+//  Genera una hoja con los datos del paciente de la cotización actual.
+//  Usa jsPDF (misma librería del cotizador). Texto real (no imagen):
+//  PDF liviano, nítido y con el nombre del paciente ya puesto.
+// ══════════════════════════════════════════════════════
+function descargarRecomendaciones() {
+  var nombrePac = (document.getElementById('p-nombre') &&
+                   document.getElementById('p-nombre').value || '').trim();
+
+  // Cargar jsPDF si no está (mismo patrón que descargarPDF)
+  function conJsPDF(cb){
+    if (window.jspdf && window.jspdf.jsPDF) { cb(); return; }
+    var sj = document.createElement('script');
+    sj.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    sj.onload = cb;
+    sj.onerror = function(){ toast('No se pudo cargar el generador de PDF. Revisa tu conexión.','error'); };
+    document.head.appendChild(sj);
+  }
+
+  conJsPDF(function(){
+    try { _construirRecomendacionesPDF(nombrePac); }
+    catch(e){ console.error('[Recom]', e); toast('No se pudo generar la hoja: ' + e.message,'error'); }
+  });
+}
+
+function _construirRecomendacionesPDF(nombrePac) {
+  var doc = new window.jspdf.jsPDF({ unit:'pt', format:'letter' });  // 612 x 792 pt
+  var PW = doc.internal.pageSize.getWidth();
+  var PH = doc.internal.pageSize.getHeight();
+  var MX = 54;                       // margen lateral
+  var MT = 54, MB = 54;              // margen superior / inferior
+  var W  = PW - MX*2;                // ancho útil
+  var y  = MT;
+
+  var COL_DARK = [15,23,23];
+  var COL_MID  = [110,120,120];
+  var COL_LINE = [220,224,224];
+  var COL_BG   = [245,243,240];
+
+  function nuevaPaginaSiHaceFalta(alto){
+    if (y + alto > PH - MB){ doc.addPage(); y = MT; pieDePaginaPendiente = true; }
+  }
+
+  // Título de sección (con línea)
+  function seccion(txt){
+    nuevaPaginaSiHaceFalta(40);
+    y += 10;
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    doc.text(txt.toUpperCase(), MX, y);
+    y += 7;
+    doc.setDrawColor(COL_LINE[0],COL_LINE[1],COL_LINE[2]); doc.setLineWidth(0.8);
+    doc.line(MX, y, MX+W, y);
+    y += 14;
+  }
+
+  // Párrafo normal
+  function parrafo(txt, opts){
+    opts = opts || {};
+    doc.setFont('helvetica', opts.bold ? 'bold':'normal');
+    doc.setFontSize(opts.size || 10);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    if (opts.dark) doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    var lines = doc.splitTextToSize(txt, W - (opts.indent||0));
+    for (var i=0;i<lines.length;i++){
+      nuevaPaginaSiHaceFalta(opts.lh || 14);
+      doc.text(lines[i], MX + (opts.indent||0), y);
+      y += (opts.lh || 14);
+    }
+    if (!opts.tight) y += 4;
+  }
+
+  // Viñeta
+  function bullet(txt, opts){
+    opts = opts || {};
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    var lines = doc.splitTextToSize(txt, W - 18);
+    for (var i=0;i<lines.length;i++){
+      nuevaPaginaSiHaceFalta(14);
+      if (i===0){
+        doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+        doc.text('•', MX+2, y);
+        doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+      }
+      doc.text(lines[i], MX+16, y);
+      y += 14;
+    }
+    y += 2;
+  }
+
+  // ── Encabezado ──
+  doc.setFillColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.rect(0, 0, PW, 92, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text('DR. MIGUEL SOTO', MX, 40);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(200,205,205);
+  doc.text('CIRUJANO PLÁSTICO CERTIFICADO', MX, 55);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+  doc.text('RECOMENDACIONES PREOPERATORIAS', MX, 78);
+  // Fecha arriba a la derecha
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(200,205,205);
+  var hoy = new Date().toLocaleDateString('es-MX', {day:'2-digit',month:'long',year:'numeric'});
+  doc.text(hoy, PW-MX, 40, {align:'right'});
+  y = 92 + 24;
+
+  // ── Datos del paciente (recuadro) ──
+  doc.setFillColor(COL_BG[0],COL_BG[1],COL_BG[2]);
+  doc.roundedRect(MX, y, W, 34, 4, 4, 'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+  doc.text('PACIENTE', MX+14, y+14);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.text(nombrePac || '________________________________', MX+14, y+27);
+  y += 34 + 16;
+
+  // ── Antes de empezar ──
+  seccion('Antes de empezar');
+  parrafo('Lo que hagas en las semanas previas pesa tanto como la cirugía: reduce el sangrado, la inflamación y el tiempo de recuperación. Esta hoja aplica a todas las cirugías; si tu procedimiento necesita algo distinto, te lo indicaremos por escrito.');
+  parrafo('Léela completa hoy y vuelve a leerla una semana antes de tu cirugía.');
+  parrafo('Los medicamentos de tu cirugía te los entregamos nosotros, junto con tus indicaciones para después de la cirugía: no necesitas comprar nada.');
+  parrafo('Si no se cumplen estas indicaciones, por tu seguridad podemos reprogramar la cirugía. Cualquier duda: escríbenos por WhatsApp al 55 6223 4133.', {dark:true});
+
+  // ── Estudios y valoraciones ──
+  seccion('Estudios y valoraciones');
+  bullet('Tus laboratorios te los tomamos nosotros: te diremos cuándo. Los resultados deben estar listos y revisados antes de confirmar tu cirugía.');
+  bullet('Tendrás una valoración preanestésica con la anestesióloga antes de la cirugía. Cuéntale todo lo que tomas y cualquier problema que hayas tenido con una anestesia, tuyo o de tu familia.');
+  bullet('Si tienes presión alta, aunque sea "poquito", avísanos: debe estar controlada antes de operar. Es una de las causas principales de sangrado e inflamación.');
+
+  // ── Lo que debes suspender ──
+  seccion('Lo que debes suspender');
+  parrafo('Suspende todo lo de esta lista 14 días antes de la cirugía y no lo retomes hasta que te lo autoricemos. Aumentan el sangrado, los moretones y la inflamación. Revisa las etiquetas: muchos productos "naturales" los contienen.');
+  bullet('Analgésicos antiinflamatorios: aspirina, ibuprofeno (Advil, Motrin), naproxeno (Flanax), diclofenaco, ketorolaco, celecoxib, AlkaSeltzer, Excedrin, ungüentos para dolor muscular.');
+  bullet('Suplementos y vitaminas: Omega 3 / aceite de pescado, vitamina E, multivitamínicos, colágeno con vitamina E, linaza.');
+  bullet('Herbolaria: Ginkgo biloba, ajo, jengibre, cúrcuma, ginseng, hierba de San Juan, té verde concentrado, valeriana.');
+  bullet('Productos para bajar de peso: quemadores de grasa, tés adelgazantes, fentermina y similares.');
+  bullet('Cannabis y CBD: en cualquier forma (fumado, comestible, aceite).');
+  parrafo('Si te duele algo, el único analgésico permitido es paracetamol (Tylenol).', {dark:true, bold:true});
+
+  // ── Medicamentos que debes informarnos ──
+  seccion('Medicamentos que debes informarnos');
+  parrafo('No suspendas por tu cuenta ningún medicamento que te haya indicado otro médico. Avísanos en la valoración y nosotros te diremos qué hacer con cada uno.');
+  bullet('Anticoagulantes o antiagregantes (warfarina, rivaroxabán, apixabán, clopidogrel): requieren un plan con tu médico tratante.');
+  bullet('Anticonceptivos hormonales y terapia de reemplazo hormonal: aumentan el riesgo de trombosis; en algunas cirugías te pediremos suspenderlos.');
+  bullet('Medicamentos inyectables para bajar de peso (semaglutida, tirzepatida: Ozempic, Wegovy, Mounjaro): retrasan el vaciamiento del estómago y pueden ser peligrosos en la anestesia. Avísanos para indicarte cuándo aplicar tu última dosis.');
+  bullet('Isotretinoína (Roaccutan, Isotrex) en el último año: afecta la cicatrización.');
+  bullet('Antidepresivos, ansiolíticos y medicamentos para dormir: casi siempre se continúan, pero la anestesióloga debe saberlo.');
+  bullet('Medicamentos para la presión, diabetes, tiroides o asma: normalmente se continúan; te diremos cuáles tomar la mañana de la cirugía con un sorbo de agua.');
+  parrafo('Trae a tu valoración con la anestesióloga una lista o fotos de todo lo que tomas, con dosis.');
+
+  // ── Tabaco, vapeo y alcohol ──
+  seccion('Tabaco, vapeo y alcohol');
+  parrafo('La nicotina cierra los vasos sanguíneos que alimentan la piel. Es la causa más evitable de heridas que no cierran, piel que se necrosa y cicatrices malas.');
+  bullet('Tabaco, vapeo, IQOS, parches, chicles y bolsitas de nicotina: suspéndelos 4 semanas antes y 4 semanas después de la cirugía. El vapeo y los parches también cuentan.');
+  bullet('Alcohol: nada desde 2 semanas antes. Aumenta el sangrado y la inflamación.');
+  parrafo('Si fumas y no puedes dejarlo, dínoslo con honestidad: es preferible reprogramar que arriesgar el resultado.', {dark:true});
+
+  // ── Rellenos y procedimientos previos ──
+  seccion('Rellenos y procedimientos previos');
+  parrafo('Cuéntanos todo lo que te hayas hecho en la zona a operar, aunque haya sido hace años. Cambia la planeación de tu cirugía y la inflamación que tendrás.');
+  bullet('Ácido hialurónico: retiene agua y prolonga la inflamación. Si lo tienes en la zona, podemos proponerte disolverlo 2 a 4 semanas antes.');
+  bullet('Bioestimuladores (Radiesse, Sculptra), rellenos permanentes (biopolímeros, silicona líquida, metacrilato) e hilos tensores: dinos el producto y la fecha aproximada.');
+  bullet('Láser, radiofrecuencia, HIFU, criolipólisis, enzimas o mesoterapia: no te hagas ninguno en las 6 semanas previas.');
+  bullet('Toxina botulínica: no te apliques en las 2 semanas previas sin consultarnos.');
+  bullet('Cirugías previas en la misma zona: trae tu información o el nombre del cirujano si lo tienes.');
+
+  // ── Alimentación e hidratación ──
+  seccion('Alimentación e hidratación');
+  parrafo('Llega a tu cirugía bien nutrida y con tu peso estable. Una piel bien nutrida cicatriza mejor y se inflama menos.');
+  bullet('Come proteína en cada comida: huevo, pollo, pescado, carne magra, lácteos, leguminosas.');
+  bullet('Toma al menos 2 litros de agua al día.');
+  bullet('Reduce la sal desde una semana antes: evita embutidos, enlatados, sopas instantáneas, botanas, comida rápida y salsas embotelladas.');
+  bullet('No hagas dietas extremas, ayunos prolongados ni cambios bruscos de peso el mes previo.');
+  bullet('Si estás bajando de peso para tu cirugía, avísanos cuando llegues a tu meta: lo ideal es mantenerla estable antes de operar.');
+
+  // ── Prepara tu casa y a tu acompañante ──
+  seccion('Prepara tu casa y a tu acompañante');
+  parrafo('Deja todo listo antes de la cirugía: los primeros días no podrás salir a comprar ni hacer esfuerzos.', {dark:true});
+  parrafo('Acompañante', {bold:true, dark:true, tight:true});
+  bullet('Necesitas un adulto responsable que te recoja y se quede contigo al menos las primeras 24 a 48 horas.');
+  bullet('No puedes manejar ni irte sola en taxi o plataforma después de la anestesia.');
+  parrafo('En casa', {bold:true, dark:true, tight:true});
+  bullet('Dos o tres almohadas extra o una almohada en cuña para dormir semisentada.');
+  bullet('Compresas frías o bolsas de chícharos congelados.');
+  bullet('Comida baja en sal ya preparada para los primeros días, agua y bebidas sin gas.');
+  bullet('Un lugar a la mano junto a tu cama para los medicamentos que te entregaremos. Termómetro. Popotes y una botella de agua.');
+  bullet('Alguien que cuide a niños pequeños y mascotas: no podrás cargar peso.');
+  parrafo('Trabajo y viajes', {bold:true, dark:true, tight:true});
+  bullet('Pide los días de incapacidad o descanso que te indicamos en la valoración.');
+  bullet('Si vienes de fuera de la Ciudad de México, quédate en la ciudad los días que te indiquemos y no vueles hasta que te lo autoricemos.');
+  bullet('Si tu cirugía es facial y te tiñes el cabello, hazlo 1 o 2 semanas antes: después tendrás que esperar varias semanas.');
+
+  // ── Un día antes ──
+  seccion('Un día antes');
+  bullet('Confirma por WhatsApp tu hora de llegada y déjalo todo listo desde la noche anterior.');
+  bullet('Si te entregamos amlodipino 5 mg, toma una tableta el día anterior a tu cirugía, como te indicamos. Ayuda a mantener tu presión estable y a reducir el sangrado y la inflamación.');
+  bullet('Ropa cómoda que abra por delante, con botones o cierre: nada que pase por la cabeza.');
+  bullet('Cena ligero y bajo en sal.');
+  bullet('Báñate y lávate el cabello con tu jabón y champú de siempre, o con el jabón antiséptico si te lo indicamos.');
+  bullet('No te rasures ni te depiles la zona a operar: los pequeños cortes aumentan el riesgo de infección.');
+  bullet('Retira barniz y uñas acrílicas o de gel de al menos un dedo de cada mano: el monitor de oxigenación se coloca ahí.');
+  bullet('Duerme bien: si te cuesta por los nervios, avísanos con anticipación en lugar de tomar algo por tu cuenta.');
+
+  // ── El día de tu cirugía ──
+  seccion('El día de tu cirugía');
+  parrafo('Llega en ayuno y a la hora exacta que te indicamos a Zorvix, Gabriel Mancera 879, Col. Del Valle, Benito Juárez, CDMX.', {dark:true});
+  parrafo('Ayuno', {bold:true, dark:true, tight:true});
+  bullet('Ayuno absoluto de 8 horas, siempre: nada de comida ni de bebida, ni siquiera agua. Tampoco chicles, dulces ni mentas.');
+  bullet('La única excepción son los medicamentos que te indiquemos para esa mañana, con el mínimo de agua para pasarlos.');
+  bullet('Si comes o bebes algo por error, avísanos antes de llegar: no lo ocultes. Puede ser peligroso.');
+  parrafo('Cómo llegar', {bold:true, dark:true, tight:true});
+  bullet('Sin maquillaje, cremas, aceites, desodorante, perfume ni bronceador.');
+  bullet('Sin joyas, piercings, aretes, pestañas postizas ni extensiones de cabello. Deja en casa todo lo de valor.');
+  bullet('Con lentes de armazón, no de contacto. Con el cabello limpio y sin peinados con pasadores o gel.');
+  parrafo('Qué traer', {bold:true, dark:true, tight:true});
+  bullet('Identificación oficial. Tus estudios y la lista de tus medicamentos.');
+  bullet('Ropa cómoda que abra por delante y zapatos sin agujeta.');
+  bullet('Tu prenda de compresión, si tu cirugía la lleva y te pedimos traerla.');
+  bullet('Teléfono y cargador.');
+  bullet('Tu acompañante, que debe esperar en el lugar o estar localizable todo el tiempo.');
+
+  // ── Cuándo avisarnos ──
+  seccion('Cuándo avisarnos');
+  parrafo('Escríbenos o llámanos al 55 6223 4133 en cuanto tengas cualquiera de estas situaciones en las 2 semanas previas. Revisaremos juntos si es seguro operar o si conviene reprogramar.');
+  bullet('Gripa, tos, dolor de garganta, fiebre, diarrea o cualquier infección, incluida una infección dental o urinaria.');
+  bullet('Prueba positiva de COVID-19 o contacto cercano con alguien enfermo.');
+  bullet('Fuegos (herpes labial), granos infectados, heridas, quemaduras de sol o irritación en la zona a operar.');
+  bullet('Sospecha o confirmación de embarazo.');
+  bullet('Un medicamento nuevo, un cambio de dosis o una visita a urgencias.');
+  bullet('Haber tomado por error algo de la lista de suspensión.');
+  parrafo('Tener tu periodo menstrual no es motivo para reprogramar.', {dark:true});
+
+  // ── Acuse de recibo ──
+  seccion('Acuse de recibo');
+  parrafo('Recibí esta hoja en mi consulta de valoración, la leí y se me resolvieron mis dudas. Entiendo que no seguir estas indicaciones puede afectar mi resultado y mi seguridad, y que la cirugía puede reprogramarse.');
+  y += 10;
+  nuevaPaginaSiHaceFalta(90);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.text('Nombre de la paciente o el paciente: ' + (nombrePac || '______________________________'), MX, y); y += 30;
+  doc.text('Firma: ____________________', MX, y);
+  doc.text('Fecha: ____ / ____ / ________', MX+W-170, y); y += 34;
+  doc.setDrawColor(COL_LINE[0],COL_LINE[1],COL_LINE[2]); doc.line(MX, y, MX+W, y); y += 18;
+  doc.setFontSize(9); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+  doc.text('Entregó: Dr. Miguel Ángel Soto Miranda · Céd. prof. 4132987 · Céd. esp. 8129376', MX, y); y += 26;
+  doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.text('Firma: ____________________', MX, y);
+
+  // ── Pie de página con número en todas las hojas ──
+  var total = doc.internal.getNumberOfPages();
+  for (var p=1; p<=total; p++){
+    doc.setPage(p);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    doc.text('Recomendaciones preoperatorias · Dr. Miguel Soto', MX, PH-28);
+    doc.text('Página ' + p + ' de ' + total, PW-MX, PH-28, {align:'right'});
+  }
+
+  var nombreArchivo = 'Recomendaciones Preoperatorias' + (nombrePac ? ' - ' + nombrePac : '') + '.pdf';
+  doc.save(nombreArchivo);
+  toast('✓ Hoja de recomendaciones generada.','success');
+}
+
 function descargarPDF() {
   var nombre = document.getElementById('p-nombre').value.trim();
   if (!nombre) { toast('Ingresa el nombre del paciente primero.','error'); return; }
@@ -4032,7 +4295,7 @@ function subirPdfDriveCompartible(blob, fileName, isAceptada, callback) {
 //  4. Pegar abajo:
 // ══════════════════════════════════════════════════════
 const CAL_CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
-const CAL_API_KEY   = 'AIzaSyCvTomBACh9AbgNx1JYYuKW9F1dp-OC6Wo';
+const CAL_API_KEY   = 'PEGA_AQUI_TU_API_KEY_NUEVA';
 // Scope unificado para Calendar + Drive (drive completo, incluye drive.file).
 const CAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive';
 // Los 5 calendarios del Miguel Soto Universe. Cada uno se consulta en paralelo.
