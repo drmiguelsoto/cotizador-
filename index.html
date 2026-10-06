@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-06b · Hoja recomendaciones preop con logo + cirugía personalizada restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-10-07 · + Solicitud de laboratorios preop + cirugía personalizada restaurados + honorario extra + noche única + desc. energy -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -822,6 +822,7 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
     <button class="btn btn-cal" id="btn-cal" onclick="importarDeAgenda()"><span class="btn-icon">📅</span>Agenda</button>
     <button class="btn btn-pdf" onclick="descargarPDF()"><span class="btn-icon">⎙</span>PDF</button>
     <button class="btn btn-o" onclick="descargarRecomendaciones()"><span class="btn-icon">📋</span>Recomendaciones</button>
+    <button class="btn btn-o" onclick="descargarLaboratorios()"><span class="btn-icon">🧪</span>Laboratorios</button>
     <button class="btn btn-drive" id="btn-drive" onclick="guardarEnDrive()"><span class="btn-icon">☁</span><span id="drive-btn-txt">Drive</span></button>
     <button class="btn btn-wa" onclick="enviarWhatsApp()"><span class="btn-icon">💬</span>WhatsApp</button>
     <button class="btn btn-email" id="btn-email" onclick="enviarEmailConPDF()"><span class="btn-icon">✉</span><span id="email-btn-txt">Email + PDF</span></button>
@@ -1850,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-06b · Hoja recomendaciones preop con logo + cirugía personalizada';
+var COTIZADOR_VERSION = 'v2026-10-07 · + Solicitud de laboratorios preop + cirugía personalizada';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3841,6 +3842,174 @@ function _construirRecomendacionesPDF(nombrePac) {
   var nombreArchivo = 'Recomendaciones Preoperatorias' + (nombrePac ? ' - ' + nombrePac : '') + '.pdf';
   doc.save(nombreArchivo);
   toast('✓ Hoja de recomendaciones generada.','success');
+}
+
+// ══════════════════════════════════════════════════════
+//  SOLICITUD DE LABORATORIOS PREOPERATORIOS
+//  Para pacientes foráneos que no pueden tomarse los estudios con nosotros.
+//  Mismo diseño, monograma y estructura que la hoja de recomendaciones.
+//  Reutiliza _RECOM_MONO (monograma) ya declarado para las recomendaciones.
+// ══════════════════════════════════════════════════════
+function descargarLaboratorios() {
+  var nombrePac = (document.getElementById('p-nombre') &&
+                   document.getElementById('p-nombre').value || '').trim();
+
+  function conJsPDF(cb){
+    if (window.jspdf && window.jspdf.jsPDF) { cb(); return; }
+    var sj = document.createElement('script');
+    sj.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    sj.onload = cb;
+    sj.onerror = function(){ toast('No se pudo cargar el generador de PDF. Revisa tu conexión.','error'); };
+    document.head.appendChild(sj);
+  }
+
+  conJsPDF(function(){
+    try { _construirLaboratoriosPDF(nombrePac); }
+    catch(e){ console.error('[Labs]', e); toast('No se pudo generar la hoja: ' + e.message,'error'); }
+  });
+}
+
+function _construirLaboratoriosPDF(nombrePac) {
+  var doc = new window.jspdf.jsPDF({ unit:'pt', format:'letter' });
+  var PW = doc.internal.pageSize.getWidth();
+  var PH = doc.internal.pageSize.getHeight();
+  var MX = 54, MT = 54, MB = 54;
+  var W  = PW - MX*2;
+  var y  = MT;
+
+  var COL_DARK = [15,23,23];
+  var COL_MID  = [110,120,120];
+  var COL_LINE = [220,224,224];
+  var COL_BG   = [245,243,240];
+
+  function nuevaPaginaSiHaceFalta(alto){
+    if (y + alto > PH - MB){ doc.addPage(); y = MT; }
+  }
+  function seccion(txt){
+    nuevaPaginaSiHaceFalta(40);
+    y += 10;
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    doc.text(txt.toUpperCase(), MX, y);
+    y += 7;
+    doc.setDrawColor(COL_LINE[0],COL_LINE[1],COL_LINE[2]); doc.setLineWidth(0.8);
+    doc.line(MX, y, MX+W, y);
+    y += 14;
+  }
+  function parrafo(txt, opts){
+    opts = opts || {};
+    doc.setFont('helvetica', opts.bold ? 'bold':'normal');
+    doc.setFontSize(opts.size || 10);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    if (opts.dark) doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    var lines = doc.splitTextToSize(txt, W - (opts.indent||0));
+    for (var i=0;i<lines.length;i++){
+      nuevaPaginaSiHaceFalta(opts.lh || 14);
+      doc.text(lines[i], MX + (opts.indent||0), y);
+      y += (opts.lh || 14);
+    }
+    if (!opts.tight) y += 4;
+  }
+  function bullet(txt, opts){
+    opts = opts || {};
+    doc.setFont('helvetica', opts.bold ? 'bold':'normal'); doc.setFontSize(10);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    if (opts.dark) doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    var lines = doc.splitTextToSize(txt, W - 18);
+    for (var i=0;i<lines.length;i++){
+      nuevaPaginaSiHaceFalta(14);
+      if (i===0){
+        doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+        doc.text('•', MX+2, y);
+        if (opts.dark) doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+        else doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+      }
+      doc.text(lines[i], MX+16, y);
+      y += 14;
+    }
+    y += 2;
+  }
+
+  // ── Encabezado (fondo oscuro + monograma oficial) ──
+  doc.setFillColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.rect(0, 0, PW, 96, 'F');
+  var _monoH = 56, _monoW = _monoH * 0.476;
+  try { doc.addImage(_RECOM_MONO, 'JPEG', MX, (96 - _monoH) / 2, _monoW, _monoH); } catch (e) {}
+  var _tx = MX + _monoW + 16;
+  doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(255,255,255);
+  doc.text('DR. MIGUEL SOTO', _tx, 40);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(190,196,196);
+  doc.setCharSpace(1.2);
+  doc.text('CIRUJANO PLÁSTICO CERTIFICADO', _tx, 53);
+  doc.setCharSpace(0);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(255,255,255);
+  doc.text('SOLICITUD DE LABORATORIOS PREOPERATORIOS', _tx, 76);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(190,196,196);
+  var hoy = new Date().toLocaleDateString('es-MX', {day:'2-digit',month:'long',year:'numeric'});
+  doc.text(hoy, PW-MX, 40, {align:'right'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(190,196,196);
+  doc.text('55 6223 4133  ·  miguelsotomd@gmail.com', PW-MX, 53, {align:'right'});
+  doc.text('Miramontes 2342, Coyoacán, CDMX', PW-MX, 64, {align:'right'});
+  y = 96 + 26;
+
+  // ── Datos del paciente ──
+  doc.setFillColor(COL_BG[0],COL_BG[1],COL_BG[2]);
+  doc.roundedRect(MX, y, W, 34, 4, 4, 'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+  doc.text('PACIENTE', MX+14, y+14);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.text(nombrePac || '________________________________', MX+14, y+27);
+  y += 34 + 16;
+
+  // ── Intro ──
+  parrafo('Esta solicitud aplica a todos los pacientes que se realizarán una cirugía con el Dr. Miguel Ángel Soto Miranda. Puede realizarse los estudios en el laboratorio de su preferencia.', {dark:true});
+
+  // ── Indicaciones para la toma ──
+  seccion('Indicaciones para la toma');
+  bullet('Ayuno: 8 horas sin alimentos. Puede tomar agua natural y sus medicamentos habituales.');
+  bullet('Cuándo: no antes de 30 días previos a su cirugía. La prueba de embarazo, no antes de 7 días previos.');
+  bullet('Resultados: envíelos por WhatsApp al 55 6223 4133 en cuanto los tenga. Deben estar revisados por el médico antes de confirmar su cirugía.');
+
+  // ── Estudios que debe realizarse ──
+  seccion('Estudios que debe realizarse');
+  bullet('Biometría hemática completa.');
+  bullet('Química sanguínea: glucosa, urea, BUN y creatinina.');
+  bullet('Electrolitos séricos: sodio, potasio y cloro.');
+  bullet('Tiempos de coagulación: TP, INR y TTPa.');
+  bullet('Grupo sanguíneo y factor Rh.');
+  bullet('Electrocardiograma de 12 derivaciones en reposo, con interpretación.');
+  bullet('Prueba de embarazo en sangre (fracción beta de hCG cuantitativa): toda mujer en edad reproductiva.');
+  parrafo('Si su médico le solicita algún estudio adicional, se lo indicará por separado.', {dark:true});
+
+  // ── Médico solicitante ──
+  y += 6;
+  nuevaPaginaSiHaceFalta(70);
+  seccion('Médico solicitante');
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+  doc.text('Dr. Miguel Ángel Soto Miranda', MX, y); y += 14;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+  doc.text('Cirujano plástico, estético y reconstructivo', MX, y); y += 13;
+  doc.text('Céd. prof. 4132987  ·  Céd. esp. 8129376  ·  Consejo Mexicano de Cirugía Plástica núm. 1568', MX, y); y += 13;
+  doc.text('Av. Canal de Miramontes 2342, Col. Avante, Coyoacán, C.P. 04460, CDMX  ·  WhatsApp 55 6223 4133', MX, y); y += 24;
+  doc.setDrawColor(COL_LINE[0],COL_LINE[1],COL_LINE[2]); doc.line(MX+180, y, MX+W-180, y); y += 12;
+  doc.setFontSize(8); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+  doc.text('Firma y sello del médico', PW/2, y, {align:'center'});
+
+  // ── Pie de página ──
+  var total = doc.internal.getNumberOfPages();
+  for (var p=1; p<=total; p++){
+    doc.setPage(p);
+    doc.setDrawColor(COL_LINE[0],COL_LINE[1],COL_LINE[2]); doc.setLineWidth(0.5);
+    doc.line(MX, PH-38, PW-MX, PH-38);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    doc.text('Solicitud de laboratorios preoperatorios · Dr. Miguel Soto', MX, PH-26);
+    doc.text('Página ' + p + ' de ' + total, PW-MX, PH-26, {align:'right'});
+  }
+
+  var nombreArchivo = 'Laboratorios Preoperatorios' + (nombrePac ? ' - ' + nombrePac : '') + '.pdf';
+  doc.save(nombreArchivo);
+  toast('✓ Solicitud de laboratorios generada.','success');
 }
 
 function descargarPDF() {
