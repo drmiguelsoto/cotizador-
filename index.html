@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07b · + Reestructura Zorvix (clínica solo cobra Tiempo Qx) · + Agenda/Drive sin API key (autorización solo por login OAuth) -->
+<!-- COTIZADOR · v2026-10-07c · Desglose Zorvix en 3 bloques: Honorarios Médicos (cirugía+ayudante+anestesia+valoraciones) / Insumos y Materiales / Clínica Zorvix (Tiempo Qx) · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1851,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07b · Reestructura Zorvix (clínica = solo Tiempo Qx)';
+var COTIZADOR_VERSION = 'v2026-10-07c · Desglose Zorvix en 3 bloques';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -2438,9 +2438,10 @@ function renderQuote() {
   // reubican visualmente los renglones.
   // ══════════════════════════════════════════════════════════════════
 
-  // Rubros de materiales/valoraciones que ahora suben a la sección superior
-  // (todo MENOS la noche de hospital, que se queda con la clínica).
-  var keysUpper = ['vpo','vpa','faja','impl','cons'];
+  // Rubros que son HONORARIOS MÉDICOS (valoraciones médicas) → bloque de honorarios.
+  var keysHon = ['vpo','vpa'];
+  // Rubros que NO son honorarios (materiales/insumos) → bloque de insumos.
+  var keysMat = ['faja','impl','cons'];
   // Conjunto completo que antes se agregaba en "Gastos de Hospital"
   // (se conserva para el cálculo de totHosp que usa el gran total).
   var keys = ['hosp','vpo','vpa','faja','impl','cons'];
@@ -2461,18 +2462,34 @@ function renderQuote() {
              + keys.reduce(function(ss,k){return ss+(x.breakdown[k]&&x.breakdown[k].on?x.breakdown[k].v:0);},0);
   },0) + totExtrasNoHon;
 
-  // ── SECCIÓN SUPERIOR: Honorarios, Anestesia, Insumos y Valoraciones ──
-  if (selected.length || extras.length) {
-    html += '<div class="q-sec-title">Honorarios · Anestesia · Insumos y Valoraciones</div>';
+  // Helper: agrega un conjunto de keys sobre selected y devuelve {total, rows[]}
+  function _aggrKeys(ks) {
+    var aggr = {}, total = 0, rows = [];
+    selected.forEach(function(s) {
+      ks.forEach(function(k) {
+        var bk = s.breakdown[k];
+        if (bk && bk.v > 0) {
+          if (!aggr[k]) aggr[k] = {label:labels[k], total:0, on:false};
+          if (bk.on) { aggr[k].total += bk.v; aggr[k].on = true; }
+        }
+      });
+    });
+    ks.forEach(function(k){ var a=aggr[k]; if(a && a.on && a.total>0){ total+=a.total; rows.push(a); } });
+    return {total: total, rows: rows};
+  }
+
+  // ── SECCIÓN A: HONORARIOS MÉDICOS (cirugía plástica, ayudante y anestesiología) ──
+  if (selected.length || extras.some(function(e){return e.hon;})) {
+    html += '<div class="q-sec-title">Honorarios Médicos · Cirugía Plástica, Ayudante y Anestesiología</div>';
     html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>';
     if(multi) html+='<th class="r">Nota</th>'; else html+=emptyNoteTh;
     html += '</tr></thead><tbody>';
 
-    // Honorarios médicos (por cirugía) + honorarios extra
+    // Honorarios de cirugía (incluyen cirujano y ayudante) + honorarios extra
     selected.forEach(function(s) {
       const bk = s.breakdown;
       const honAmt = bk.hon.on ? bk.hon.v : 0;
-      html += '<tr><td>1</td><td>Qx '+s.proc.n+'<span class="cat-tag">'+s.proc.cat+'</span></td>';
+      html += '<tr><td>1</td><td>Honorarios Qx '+s.proc.n+'<span class="cat-tag">'+s.proc.cat+'</span></td>';
       html += '<td class="r">'+(bk.hon.on?fmt(bk.hon.v):'<span class="strike">'+fmt(bk.hon.v)+'</span>')+'</td>';
       html += '<td class="r">'+(bk.hon.on?fmt(honAmt):fmt(0))+'</td>'+emptyNoteCell+'</tr>';
     });
@@ -2481,55 +2498,49 @@ function renderQuote() {
       html += '<tr><td>1</td><td>'+escapeHtml(e.n)+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
     });
 
-    const totHon = totHon2;
-    const honDiscAmt = honDiscAmt2;
-    const totHonNet = totHonNet2;
-    // Subtotal de honorarios (siempre, para transparencia) + descuento si aplica
-    if (totHon > 0) {
-      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Subtotal Honorarios Médicos:</td><td class="r">'+fmt(totHon)+'</td>'+emptyNoteCell+'</tr>';
-      if (honDisc > 0) {
-        html += '<tr style="color:var(--green)"><td colspan="3" style="text-align:right;font-weight:500">Descuento Autorizado Honorarios ('+honDisc+'%):</td><td class="r" style="font-weight:600">− '+fmt(honDiscAmt)+'</td>'+emptyNoteCell+'</tr>';
-        html += '<tr class="stotal"><td colspan="3" style="text-align:right">Honorarios c/Descuento:</td><td class="r">'+fmt(totHonNet)+'</td>'+emptyNoteCell+'</tr>';
-      }
+    // Descuento de honorarios (solo aplica a honorarios de cirugía)
+    if (totHon2 > 0 && honDisc > 0) {
+      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Subtotal Honorarios de Cirugía:</td><td class="r">'+fmt(totHon2)+'</td>'+emptyNoteCell+'</tr>';
+      html += '<tr style="color:var(--green)"><td colspan="3" style="text-align:right;font-weight:500">Descuento Autorizado Honorarios ('+honDisc+'%):</td><td class="r" style="font-weight:600">− '+fmt(honDiscAmt2)+'</td>'+emptyNoteCell+'</tr>';
+      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Honorarios de Cirugía c/Descuento:</td><td class="r">'+fmt(totHonNet2)+'</td>'+emptyNoteCell+'</tr>';
     }
 
-    // Anestesiología (sube a esta sección)
+    // Anestesiología
     if (selected.length) {
       const anestNote = multi ? selected.map(function(x,i){return i===0?('Base: '+fmt(x.breakdown.anest.v)):('+'+fmt(x.breakdown.anest.v));}).join('<br>') : '';
-      html+='<tr><td>1</td><td>Anestesiología'+(multi?' <span class="bk-badge">+$1,500 c/proc. adic.</span>':'')+'</td><td class="r">'+fmt(totAnestUp)+'</td><td class="r">'+fmt(totAnestUp)+'</td>';
+      html+='<tr><td>1</td><td>Honorarios de Anestesiología'+(multi?' <span class="bk-badge">+$1,500 c/proc. adic.</span>':'')+'</td><td class="r">'+fmt(totAnestUp)+'</td><td class="r">'+fmt(totAnestUp)+'</td>';
       if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+anestNote+'</td>'; else html+=emptyNoteCell;
       html+='</tr>';
     }
 
-    // Insumos y valoraciones (VPO, VPA, Faja, Implantes, Consumibles) — sin la noche de hospital
-    var aggrUp = {};
-    selected.forEach(function(s) {
-      keysUpper.forEach(function(k) {
-        var bk = s.breakdown[k];
-        if (bk && bk.v > 0) {
-          if (!aggrUp[k]) aggrUp[k] = {label:labels[k], total:0, on:false};
-          if (bk.on) { aggrUp[k].total += bk.v; aggrUp[k].on = true; }
-        }
-      });
-    });
-    var totKeysUp = 0;
-    keysUpper.forEach(function(k) {
-      var a = aggrUp[k];
-      if(a && a.on && a.total>0) {
-        totKeysUp += a.total;
-        html+='<tr><td>1</td><td>'+a.label+'</td><td class="r">'+fmt(a.total)+'</td><td class="r">'+fmt(a.total)+'</td>'+emptyNoteCell+'</tr>';
-      }
+    // Valoraciones médicas (VPO, VPA) — honorarios
+    var aggHon = _aggrKeys(keysHon);
+    aggHon.rows.forEach(function(a){
+      html+='<tr><td>1</td><td>'+a.label+'</td><td class="r">'+fmt(a.total)+'</td><td class="r">'+fmt(a.total)+'</td>'+emptyNoteCell+'</tr>';
     });
 
-    // Extras no-honorario (p.ej. bra postoperatorio, insumos sueltos) — también suben
+    var totSecHon = totHonNet2 + totAnestUp + aggHon.total;
+    html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Honorarios Médicos:</td><td class="r">'+fmt(totSecHon)+'</td>'+emptyNoteCell+'</tr>';
+    html += '</tbody></table>';
+  }
+
+  // ── SECCIÓN B: INSUMOS Y MATERIALES (no honorarios: fajas, implantes, consumibles) ──
+  var aggMat = _aggrKeys(keysMat);
+  if (aggMat.total > 0 || extras.some(function(e){return !e.hon;})) {
+    html += '<div class="q-sec-title">Insumos y Materiales</div>';
+    html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>'+emptyNoteTh+'</tr></thead><tbody>';
+
+    aggMat.rows.forEach(function(a){
+      html+='<tr><td>1</td><td>'+a.label+'</td><td class="r">'+fmt(a.total)+'</td><td class="r">'+fmt(a.total)+'</td>'+emptyNoteCell+'</tr>';
+    });
+    // Extras no-honorario (p.ej. bra postoperatorio, insumos sueltos)
     extras.forEach(function(e) {
       if(e.hon) return;
       html+='<tr><td>1</td><td>'+escapeHtml(e.n)+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
     });
 
-    // Total de la sección superior = honorarios netos + anestesia + insumos + extras no-hon
-    var totUpper = totHonNet2 + totAnestUp + totKeysUp + totExtrasNoHon;
-    html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Honorarios, Anestesia e Insumos:</td><td class="r">'+fmt(totUpper)+'</td>'+emptyNoteCell+'</tr>';
+    var totSecMat = aggMat.total + totExtrasNoHon;
+    html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Insumos y Materiales:</td><td class="r">'+fmt(totSecMat)+'</td>'+emptyNoteCell+'</tr>';
     html += '</tbody></table>';
   }
 
