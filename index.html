@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07d · PDF en hoja Carta real a sangre (sin marco blanco), multipágina si es largo · 3 bloques Zorvix · sin API key -->
+<!-- COTIZADOR · v2026-10-07e · PDF Carta responsivo con html2pdf: a sangre, cortes limpios (fila completa), 1 o varias hojas segun largo · 3 bloques Zorvix · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1851,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07d · PDF Carta a sangre + 3 bloques Zorvix';
+var COTIZADOR_VERSION = 'v2026-10-07e · PDF Carta responsivo (html2pdf)';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3578,67 +3578,88 @@ function generarPdfBlob(callback) {
   }
 }
 
-function capturar(card, callback) {
-  // Ocultar temporalmente elementos no deseados
-  var toHide = document.querySelectorAll('.customizer, .extras-section, .sph-remove, .extra-del');
-  toHide.forEach(function(el){ el.dataset.ph = el.style.display; el.style.display = 'none'; });
-
-  // Quitar temporalmente marco, sombra y esquinas redondeadas para que el PDF
-  // salga A SANGRE (sin marco blanco alrededor, como un documento impreso de verdad).
-  var _pr = card.style.borderRadius, _pb = card.style.border, _ps = card.style.boxShadow;
-  card.style.borderRadius = '0';
-  card.style.border = 'none';
-  card.style.boxShadow = 'none';
-
-  function _restaurar(){
-    toHide.forEach(function(el){ el.style.display = el.dataset.ph || ''; });
-    card.style.borderRadius = _pr;
-    card.style.border = _pb;
-    card.style.boxShadow = _ps;
-  }
-
-  html2canvas(card, {
-    scale: 2,
-    useCORS: true,
-    backgroundColor: '#ffffff',
-    logging: false,
-    windowWidth: card.scrollWidth,
-    windowHeight: card.scrollHeight
-  }).then(function(canvas) {
-    _restaurar();
-
-    var imgData = canvas.toDataURL('image/jpeg', 0.97);
-
-    // ── Hoja CARTA REAL (no a la medida) ──────────────────────────────
-    // Antes la hoja se hacía a la medida del contenido (más alta que Carta)
-    // y con 10 mm de margen: al imprimir, la impresora reescalaba todo y lo
-    // dejaba enmarcado como "foto con margen blanco". Ahora cada página es
-    // Carta exacta (215.9 × 279.4 mm) y la cotización va A SANGRE (ancho
-    // completo, sin margen). La impresora ya no reescala: imprime 1:1.
-    var pageW = 215.9, pageH = 279.4;              // Carta (mm)
-    var imgW  = pageW;                              // ancho completo, a sangre
-    var imgH  = (canvas.height * imgW) / canvas.width;
-
-    var pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, pageH], orientation:'portrait' });
-
-    if (imgH <= pageH + 0.5) {
-      // Cabe en una sola hoja Carta.
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
-    } else {
-      // Más largo que una hoja: se reparte en páginas Carta (1:1, sin reescalar).
-      var y = 0, guard = 0;
-      while (y < imgH - 0.5 && guard < 40) {
-        if (y > 0) pdf.addPage([pageW, pageH], 'portrait');
-        pdf.addImage(imgData, 'JPEG', 0, -y, imgW, imgH);
-        y += pageH;
-        guard++;
+// Construye una copia del CSS @media print del sistema, pero con cada selector
+// prefijado por `scope`, para aplicarlo SOLO al clon fuera de pantalla (sin que
+// parpadee la tarjeta real). html/body se mapean al propio scope.
+function _cssImpresionScoped(scope){
+  var out = '';
+  try {
+    var sheets = document.styleSheets;
+    for (var i=0;i<sheets.length;i++){
+      var rules; try { rules = sheets[i].cssRules; } catch(e){ continue; }
+      if(!rules) continue;
+      for (var j=0;j<rules.length;j++){
+        var r = rules[j];
+        var mt = (r.media && r.media.mediaText) ? r.media.mediaText : '';
+        if (r.type === 4 && /print/i.test(mt)){
+          for (var k=0;k<r.cssRules.length;k++){
+            var sr = r.cssRules[k];
+            if (sr.type !== 1 || !sr.selectorText) continue;   // solo reglas de estilo
+            var sel = sr.selectorText.split(',').map(function(s){
+              s = s.trim(); if(!s) return '';
+              if (/^(html|body)$/i.test(s)) return scope;
+              if (/^(html|body)\b/i.test(s)) return s.replace(/^(html|body)\b/i, scope);
+              return scope + ' ' + s;
+            }).filter(Boolean).join(',');
+            if (sel) out += sel + '{' + sr.style.cssText + '}\n';
+          }
+        }
       }
     }
+  } catch(e){}
+  return out;
+}
 
+function capturar(card, callback) {
+  // ── PDF en hoja CARTA, responsivo y a sangre ──────────────────────────
+  // Se clona la cotización a un contenedor OCULTO con el layout compacto de
+  // impresión (el mismo @media print ya afinado), y se genera con html2pdf:
+  //  • hojas Carta reales (la impresora no reescala → imprime 1:1),
+  //  • a sangre (margen 0, sin marco blanco),
+  //  • cortes de página LIMPIOS (nunca a media fila ni partiendo un bloque):
+  //    una cotización normal cabe en 1 hoja; una larga fluye a 2+ hojas Carta.
+  var holder = document.createElement('div');
+  holder.className = '_pdfholder';
+  holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:816px;background:#fff;z-index:-1';
+
+  var styleEl = document.createElement('style');
+  styleEl.textContent =
+    '._pdfholder .quote-card{width:100%!important;border:none!important;border-radius:0!important;box-shadow:none!important;margin:0!important}\n'
+    + _cssImpresionScoped('._pdfholder')
+    // Las tablas SÍ pueden repartirse entre hojas, pero cada fila se mantiene
+    // completa (nunca se parte una fila a la mitad).
+    + '\n._pdfholder table.qt{page-break-inside:auto!important}'
+    + '\n._pdfholder table.qt tr{page-break-inside:avoid!important}';
+  document.head.appendChild(styleEl);
+
+  var clone = card.cloneNode(true);
+  // Quitar del clon los controles de edición que no van en el PDF.
+  clone.querySelectorAll('.customizer, .extras-section, .sph-remove, .extra-del, .sph-arrow, .proc-add-btn, .cat-chips').forEach(function(el){ el.remove(); });
+  clone.classList.remove('print-scale');
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
+
+  function _cleanup(){
+    try { document.head.removeChild(styleEl); } catch(e){}
+    try { document.body.removeChild(holder); } catch(e){}
+  }
+
+  var opt = {
+    margin: 0,
+    image: { type:'jpeg', quality:0.98 },
+    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, windowWidth:816 },
+    jsPDF: { unit:'mm', format:'letter', orientation:'portrait' },
+    pagebreak: { mode:['css','legacy'], avoid:['tr', '.grand-total', '.terminos', '.q-footer'] }
+  };
+
+  if (!window.html2pdf) { _cleanup(); callback(new Error('html2pdf no disponible')); return; }
+
+  window.html2pdf().set(opt).from(clone).toPdf().get('pdf').then(function(pdf){
     var blob = pdf.output('blob');
+    _cleanup();
     callback(null, blob);
   }).catch(function(err){
-    _restaurar();
+    _cleanup();
     callback(err);
   });
 }
