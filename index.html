@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07c · Desglose Zorvix en 3 bloques: Honorarios Médicos (cirugía+ayudante+anestesia+valoraciones) / Insumos y Materiales / Clínica Zorvix (Tiempo Qx) · sin API key -->
+<!-- COTIZADOR · v2026-10-07d · PDF en hoja Carta real a sangre (sin marco blanco), multipágina si es largo · 3 bloques Zorvix · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1851,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07c · Desglose Zorvix en 3 bloques';
+var COTIZADOR_VERSION = 'v2026-10-07d · PDF Carta a sangre + 3 bloques Zorvix';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3583,37 +3583,62 @@ function capturar(card, callback) {
   var toHide = document.querySelectorAll('.customizer, .extras-section, .sph-remove, .extra-del');
   toHide.forEach(function(el){ el.dataset.ph = el.style.display; el.style.display = 'none'; });
 
+  // Quitar temporalmente marco, sombra y esquinas redondeadas para que el PDF
+  // salga A SANGRE (sin marco blanco alrededor, como un documento impreso de verdad).
+  var _pr = card.style.borderRadius, _pb = card.style.border, _ps = card.style.boxShadow;
+  card.style.borderRadius = '0';
+  card.style.border = 'none';
+  card.style.boxShadow = 'none';
+
+  function _restaurar(){
+    toHide.forEach(function(el){ el.style.display = el.dataset.ph || ''; });
+    card.style.borderRadius = _pr;
+    card.style.border = _pb;
+    card.style.boxShadow = _ps;
+  }
+
   html2canvas(card, {
     scale: 2,
     useCORS: true,
-    backgroundColor: '#F4F2F1',
+    backgroundColor: '#ffffff',
     logging: false,
     windowWidth: card.scrollWidth,
     windowHeight: card.scrollHeight
   }).then(function(canvas) {
-    // Restaurar elementos
-    toHide.forEach(function(el){ el.style.display = el.dataset.ph || ''; });
+    _restaurar();
 
     var imgData = canvas.toDataURL('image/jpeg', 0.97);
 
-    // Calcular dimensiones para que todo quepa en UNA sola página
-    var pageW = 215.9; // letter width en mm
-    var margin = 10;
-    var imgW = pageW - margin * 2;
-    var imgH = (canvas.height * imgW) / canvas.width;
-    var pageH = imgH + margin * 2; // página se adapta al contenido
+    // ── Hoja CARTA REAL (no a la medida) ──────────────────────────────
+    // Antes la hoja se hacía a la medida del contenido (más alta que Carta)
+    // y con 10 mm de margen: al imprimir, la impresora reescalaba todo y lo
+    // dejaba enmarcado como "foto con margen blanco". Ahora cada página es
+    // Carta exacta (215.9 × 279.4 mm) y la cotización va A SANGRE (ancho
+    // completo, sin margen). La impresora ya no reescala: imprime 1:1.
+    var pageW = 215.9, pageH = 279.4;              // Carta (mm)
+    var imgW  = pageW;                              // ancho completo, a sangre
+    var imgH  = (canvas.height * imgW) / canvas.width;
 
-    var pdf = new window.jspdf.jsPDF({
-      unit: 'mm',
-      format: [pageW, pageH],
-      orientation: 'portrait'
-    });
+    var pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, pageH], orientation:'portrait' });
 
-    pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+    if (imgH <= pageH + 0.5) {
+      // Cabe en una sola hoja Carta.
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
+    } else {
+      // Más largo que una hoja: se reparte en páginas Carta (1:1, sin reescalar).
+      var y = 0, guard = 0;
+      while (y < imgH - 0.5 && guard < 40) {
+        if (y > 0) pdf.addPage([pageW, pageH], 'portrait');
+        pdf.addImage(imgData, 'JPEG', 0, -y, imgW, imgH);
+        y += pageH;
+        guard++;
+      }
+    }
+
     var blob = pdf.output('blob');
     callback(null, blob);
   }).catch(function(err){
-    toHide.forEach(function(el){ el.style.display = el.dataset.ph || ''; });
+    _restaurar();
     callback(err);
   });
 }
