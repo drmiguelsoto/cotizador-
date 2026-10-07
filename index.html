@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07 · + Solicitud de laboratorios preop + cirugía personalizada restaurados + honorario extra + noche única + desc. energy -->
+<!-- COTIZADOR · v2026-10-07b · + Reestructura Zorvix (clínica solo cobra Tiempo Qx) · + Agenda/Drive sin API key (autorización solo por login OAuth) -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1851,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07 · + Solicitud de laboratorios preop + cirugía personalizada';
+var COTIZADOR_VERSION = 'v2026-10-07b · Reestructura Zorvix (clínica = solo Tiempo Qx)';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -2428,10 +2428,47 @@ function renderQuote() {
   const emptyNoteCell = multi ? '<td></td>' : '';
   const emptyNoteTh   = multi ? '<th></th>' : '';
 
-  // ── Section 1: Honorarios ──
-  if (selected.length || extras.some(function(e){return e.hon;})) {
-    html += '<div class="q-sec-title">Honorarios Equipo Quirúrgico</div>';
-    html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>'+emptyNoteTh+'</tr></thead><tbody>';
+  // ══════════════════════════════════════════════════════════════════
+  // REESTRUCTURA ZORVIX (v2026-10-07b):
+  // La clínica (Zorvix) SOLO cobra el Tiempo Quirúrgico. Todo lo demás
+  // —honorarios médicos, anestesiología, VPA, VPO, fajas, implantes y
+  // consumibles (incl. piezotomo / Renuvion / BodyTite / Endolifting)—
+  // va en la SECCIÓN SUPERIOR. La Noche de Hospitalización se deja con
+  // la clínica (cargo de instalación). El gran total NO cambia: solo se
+  // reubican visualmente los renglones.
+  // ══════════════════════════════════════════════════════════════════
+
+  // Rubros de materiales/valoraciones que ahora suben a la sección superior
+  // (todo MENOS la noche de hospital, que se queda con la clínica).
+  var keysUpper = ['vpo','vpa','faja','impl','cons'];
+  // Conjunto completo que antes se agregaba en "Gastos de Hospital"
+  // (se conserva para el cálculo de totHosp que usa el gran total).
+  var keys = ['hosp','vpo','vpa','faja','impl','cons'];
+  var labels = {'hosp':'Noche de Hospitalización (IVA inc.)','vpo':'VPO','vpa':'VPA','faja':'Faja','impl':'Implantes','cons':'Consumibles'};
+
+  var totHon2 = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
+  var honDiscAmt2 = totHon2 * honDisc / 100;
+  var totHonNet2 = totHon2 - honDiscAmt2;
+
+  // Totales de apoyo (mismos valores de siempre, solo reubicados)
+  var totAnestUp = selected.reduce(function(s,x){return s+(x.breakdown.anest.on?x.breakdown.anest.v:0);},0);
+  var totExtrasNoHon = extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
+  // totHosp se mantiene con su definición original (qx+anest+todos los keys
+  // incl. hosp + extras no-hon) porque el gran total (grandSub/bruto) lo usa.
+  var totHosp = selected.reduce(function(s,x) {
+    return s + (x.breakdown.qx.on?x.breakdown.qx.v:0)
+             + (x.breakdown.anest.on?x.breakdown.anest.v:0)
+             + keys.reduce(function(ss,k){return ss+(x.breakdown[k]&&x.breakdown[k].on?x.breakdown[k].v:0);},0);
+  },0) + totExtrasNoHon;
+
+  // ── SECCIÓN SUPERIOR: Honorarios, Anestesia, Insumos y Valoraciones ──
+  if (selected.length || extras.length) {
+    html += '<div class="q-sec-title">Honorarios · Anestesia · Insumos y Valoraciones</div>';
+    html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>';
+    if(multi) html+='<th class="r">Nota</th>'; else html+=emptyNoteTh;
+    html += '</tr></thead><tbody>';
+
+    // Honorarios médicos (por cirugía) + honorarios extra
     selected.forEach(function(s) {
       const bk = s.breakdown;
       const honAmt = bk.hon.on ? bk.hon.v : 0;
@@ -2443,80 +2480,81 @@ function renderQuote() {
       if(!e.hon) return;
       html += '<tr><td>1</td><td>'+escapeHtml(e.n)+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
     });
-    const totHon = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
-    const honDiscAmt = totHon * honDisc / 100;
-    const totHonNet = totHon - honDiscAmt;
-    if (honDisc > 0) {
-      // Subtotal de honorarios brutos
-      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Subtotal Honorarios:</td><td class="r">'+fmt(totHon)+'</td>'+emptyNoteCell+'</tr>';
-      // Línea de descuento autorizado
-      html += '<tr style="color:var(--green)"><td colspan="3" style="text-align:right;font-weight:500">Descuento Autorizado Honorarios ('+honDisc+'%):</td><td class="r" style="font-weight:600">− '+fmt(honDiscAmt)+'</td>'+emptyNoteCell+'</tr>';
-      // Total neto de honorarios
-      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Honorarios c/Descuento:</td><td class="r">'+fmt(totHonNet)+'</td>'+emptyNoteCell+'</tr>';
-    } else {
-      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Honorarios Equipo Qx:</td><td class="r">'+fmt(totHon)+'</td>'+emptyNoteCell+'</tr>';
+
+    const totHon = totHon2;
+    const honDiscAmt = honDiscAmt2;
+    const totHonNet = totHonNet2;
+    // Subtotal de honorarios (siempre, para transparencia) + descuento si aplica
+    if (totHon > 0) {
+      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Subtotal Honorarios Médicos:</td><td class="r">'+fmt(totHon)+'</td>'+emptyNoteCell+'</tr>';
+      if (honDisc > 0) {
+        html += '<tr style="color:var(--green)"><td colspan="3" style="text-align:right;font-weight:500">Descuento Autorizado Honorarios ('+honDisc+'%):</td><td class="r" style="font-weight:600">− '+fmt(honDiscAmt)+'</td>'+emptyNoteCell+'</tr>';
+        html += '<tr class="stotal"><td colspan="3" style="text-align:right">Honorarios c/Descuento:</td><td class="r">'+fmt(totHonNet)+'</td>'+emptyNoteCell+'</tr>';
+      }
     }
-    html += '</tbody></table>';
-  }
 
-  // ── Section 2: Gastos de Hospital ──
-  // Solo renderizar la sección si hay cirugías seleccionadas o extras.
-  // Si solo hay items de módulos no-quirúrgicos (Inyectables, ED, etc.) esta sección no aplica.
-  var keys = ['hosp','vpo','vpa','faja','impl','cons'];
-  var labels = {'hosp':'Noche de Hospitalización (IVA inc.)','vpo':'VPO','vpa':'VPA','faja':'Faja','impl':'Implantes','cons':'Consumibles'};
-  var totHosp = 0;
-  var totHon2 = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
-  var honDiscAmt2 = totHon2 * honDisc / 100;
-  var totHonNet2 = totHon2 - honDiscAmt2;
-
-  if (selected.length || extras.some(function(e){return !e.hon;})) {
-    html += '<div class="q-sec-title">Gastos de Hospital &nbsp;·&nbsp; Tiempo Qx &nbsp;·&nbsp; Anestesia</div>';
-    html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>';
-    if(multi) html+='<th class="r">Nota</th>';
-    html += '</tr></thead><tbody>';
-
-    if(selected.length) {
-      const totQx = selected.reduce(function(s,x){return s+(x.breakdown.qx.on?x.breakdown.qx.v:0);},0);
-      const qxNote = multi ? selected.map(function(x,i){return (i===0?'100%':'50%')+': '+fmt(x.breakdown.qx.v);}).join('<br>') : '';
-      html+='<tr><td>1</td><td>Gastos de Hospital (Tiempo Qx)</td><td class="r">'+fmt(totQx)+'</td><td class="r">'+fmt(totQx)+'</td>';
-      if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+qxNote+'</td>';
-      html+='</tr>';
-      const totAnest = selected.reduce(function(s,x){return s+(x.breakdown.anest.on?x.breakdown.anest.v:0);},0);
+    // Anestesiología (sube a esta sección)
+    if (selected.length) {
       const anestNote = multi ? selected.map(function(x,i){return i===0?('Base: '+fmt(x.breakdown.anest.v)):('+'+fmt(x.breakdown.anest.v));}).join('<br>') : '';
-      html+='<tr><td>1</td><td>Anestesiología'+(multi?' <span class="bk-badge">+$1,500 c/proc. adic.</span>':'')+'</td><td class="r">'+fmt(totAnest)+'</td><td class="r">'+fmt(totAnest)+'</td>';
-      if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+anestNote+'</td>';
+      html+='<tr><td>1</td><td>Anestesiología'+(multi?' <span class="bk-badge">+$1,500 c/proc. adic.</span>':'')+'</td><td class="r">'+fmt(totAnestUp)+'</td><td class="r">'+fmt(totAnestUp)+'</td>';
+      if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+anestNote+'</td>'; else html+=emptyNoteCell;
       html+='</tr>';
     }
 
-    var aggr = {};
+    // Insumos y valoraciones (VPO, VPA, Faja, Implantes, Consumibles) — sin la noche de hospital
+    var aggrUp = {};
     selected.forEach(function(s) {
-      keys.forEach(function(k) {
+      keysUpper.forEach(function(k) {
         var bk = s.breakdown[k];
         if (bk && bk.v > 0) {
-          if (!aggr[k]) aggr[k] = {label:labels[k], total:0, on:false};
-          if (bk.on) { aggr[k].total += bk.v; aggr[k].on = true; }
+          if (!aggrUp[k]) aggrUp[k] = {label:labels[k], total:0, on:false};
+          if (bk.on) { aggrUp[k].total += bk.v; aggrUp[k].on = true; }
         }
       });
     });
-    Object.keys(aggr).forEach(function(k) {
-      var a = aggr[k];
-      if(a.on && a.total>0) {
+    var totKeysUp = 0;
+    keysUpper.forEach(function(k) {
+      var a = aggrUp[k];
+      if(a && a.on && a.total>0) {
+        totKeysUp += a.total;
         html+='<tr><td>1</td><td>'+a.label+'</td><td class="r">'+fmt(a.total)+'</td><td class="r">'+fmt(a.total)+'</td>'+emptyNoteCell+'</tr>';
       }
     });
 
-    extras.forEach(function(e,i) {
+    // Extras no-honorario (p.ej. bra postoperatorio, insumos sueltos) — también suben
+    extras.forEach(function(e) {
       if(e.hon) return;
-      html+='<tr><td>1</td><td>'+e.n+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
+      html+='<tr><td>1</td><td>'+escapeHtml(e.n)+'</td><td class="r">'+fmt(e.p)+'</td><td class="r">'+fmt(e.p)+'</td>'+emptyNoteCell+'</tr>';
     });
 
-    totHosp = selected.reduce(function(s,x) {
-      return s + (x.breakdown.qx.on?x.breakdown.qx.v:0)
-               + (x.breakdown.anest.on?x.breakdown.anest.v:0)
-               + keys.reduce(function(ss,k){return ss+(x.breakdown[k]&&x.breakdown[k].on?x.breakdown[k].v:0);},0);
-    },0) + extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
+    // Total de la sección superior = honorarios netos + anestesia + insumos + extras no-hon
+    var totUpper = totHonNet2 + totAnestUp + totKeysUp + totExtrasNoHon;
+    html += '<tr class="stotal"><td colspan="3" style="text-align:right">Total Honorarios, Anestesia e Insumos:</td><td class="r">'+fmt(totUpper)+'</td>'+emptyNoteCell+'</tr>';
+    html += '</tbody></table>';
+  }
 
-    html+='<tr class="stotal"><td colspan="3" style="text-align:right">Total Gastos de Hospital:</td><td class="r">'+fmt(totHosp)+'</td>'+emptyNoteCell+'</tr>';
+  // ── SECCIÓN INFERIOR: Clínica (Zorvix) · Tiempo Quirúrgico ──
+  // La clínica solo cobra el Tiempo Quirúrgico. La noche de hospitalización
+  // (cargo de instalación) se mantiene aquí.
+  if (selected.length) {
+    const totQx = selected.reduce(function(s,x){return s+(x.breakdown.qx.on?x.breakdown.qx.v:0);},0);
+    var totHospOnly = selected.reduce(function(ss,x){return ss+(x.breakdown.hosp&&x.breakdown.hosp.on?x.breakdown.hosp.v:0);},0);
+
+    html += '<div class="q-sec-title">Clínica (Zorvix) · Tiempo Quirúrgico</div>';
+    html += '<table class="qt">'+cg+'<thead><tr><th>Cant.</th><th>Concepto</th><th class="r">Precio Unit.</th><th class="r">Importe</th>';
+    if(multi) html+='<th class="r">Nota</th>'; else html+=emptyNoteTh;
+    html += '</tr></thead><tbody>';
+
+    const qxNote = multi ? selected.map(function(x,i){return (i===0?'100%':'50%')+': '+fmt(x.breakdown.qx.v);}).join('<br>') : '';
+    html+='<tr><td>1</td><td>Tiempo Quirúrgico</td><td class="r">'+fmt(totQx)+'</td><td class="r">'+fmt(totQx)+'</td>';
+    if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+qxNote+'</td>'; else html+=emptyNoteCell;
+    html+='</tr>';
+
+    if (totHospOnly > 0) {
+      html+='<tr><td>1</td><td>'+labels['hosp']+'</td><td class="r">'+fmt(totHospOnly)+'</td><td class="r">'+fmt(totHospOnly)+'</td>'+emptyNoteCell+'</tr>';
+    }
+
+    html+='<tr class="stotal"><td colspan="3" style="text-align:right">Total Clínica (Zorvix):</td><td class="r">'+fmt(totQx+totHospOnly)+'</td>'+emptyNoteCell+'</tr>';
     html+='</tbody></table>';
   }
 
@@ -4477,7 +4515,9 @@ function subirPdfDriveCompartible(blob, fileName, isAceptada, callback) {
 //  4. Pegar abajo:
 // ══════════════════════════════════════════════════════
 const CAL_CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
-const CAL_API_KEY   = 'PEGA_AQUI_TU_API_KEY_NUEVA';
+// CAL_API_KEY ELIMINADA (v2026-10-07b): la agenda (Calendar) y las subidas a
+// Drive se autorizan con el token OAuth del login de Google, no con API key.
+// Ya no hay que pegar ninguna clave aquí nunca más.
 // Scope unificado para Calendar + Drive (drive completo, incluye drive.file).
 const CAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive';
 // Los 5 calendarios del Miguel Soto Universe. Cada uno se consulta en paralelo.
@@ -4497,7 +4537,9 @@ let calGisReady    = false;
 let calAccessToken = null;
 
 function calConfigurado() {
-  return CAL_CLIENT_ID !== 'TU_CAL_CLIENT_ID' && CAL_API_KEY !== 'TU_CAL_API_KEY';
+  // Ya NO se requiere API key: la agenda y Drive se autorizan con el login
+  // de Google (token OAuth). Basta con tener configurado el Client ID.
+  return CAL_CLIENT_ID !== 'TU_CAL_CLIENT_ID';
 }
 
 function cargarCalLibs(callback) {
@@ -4510,7 +4552,7 @@ function cargarCalLibs(callback) {
     s1.src = 'https://apis.google.com/js/api.js';
     s1.onload = function(){
       gapi.load('client', function(){
-        gapi.client.init({ apiKey: CAL_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'] })
+        gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'] })
           .then(function(){ calGapiReady = true; check(); });
       });
     };
