@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07e · PDF Carta responsivo con html2pdf: a sangre, cortes limpios (fila completa), 1 o varias hojas segun largo · 3 bloques Zorvix · sin API key -->
+<!-- COTIZADOR · v2026-10-07f · PDF Carta por rebanado: captura la tarjeta real y corta solo entre filas/secciones completas, a sangre, 1 o varias hojas · 3 bloques Zorvix · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1851,7 +1851,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07e · PDF Carta responsivo (html2pdf)';
+var COTIZADOR_VERSION = 'v2026-10-07f · PDF Carta por rebanado limpio';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3578,88 +3578,106 @@ function generarPdfBlob(callback) {
   }
 }
 
-// Construye una copia del CSS @media print del sistema, pero con cada selector
-// prefijado por `scope`, para aplicarlo SOLO al clon fuera de pantalla (sin que
-// parpadee la tarjeta real). html/body se mapean al propio scope.
-function _cssImpresionScoped(scope){
-  var out = '';
-  try {
-    var sheets = document.styleSheets;
-    for (var i=0;i<sheets.length;i++){
-      var rules; try { rules = sheets[i].cssRules; } catch(e){ continue; }
-      if(!rules) continue;
-      for (var j=0;j<rules.length;j++){
-        var r = rules[j];
-        var mt = (r.media && r.media.mediaText) ? r.media.mediaText : '';
-        if (r.type === 4 && /print/i.test(mt)){
-          for (var k=0;k<r.cssRules.length;k++){
-            var sr = r.cssRules[k];
-            if (sr.type !== 1 || !sr.selectorText) continue;   // solo reglas de estilo
-            var sel = sr.selectorText.split(',').map(function(s){
-              s = s.trim(); if(!s) return '';
-              if (/^(html|body)$/i.test(s)) return scope;
-              if (/^(html|body)\b/i.test(s)) return s.replace(/^(html|body)\b/i, scope);
-              return scope + ' ' + s;
-            }).filter(Boolean).join(',');
-            if (sel) out += sel + '{' + sr.style.cssText + '}\n';
-          }
-        }
-      }
-    }
-  } catch(e){}
-  return out;
-}
-
 function capturar(card, callback) {
-  // ── PDF en hoja CARTA, responsivo y a sangre ──────────────────────────
-  // Se clona la cotización a un contenedor OCULTO con el layout compacto de
-  // impresión (el mismo @media print ya afinado), y se genera con html2pdf:
-  //  • hojas Carta reales (la impresora no reescala → imprime 1:1),
-  //  • a sangre (margen 0, sin marco blanco),
-  //  • cortes de página LIMPIOS (nunca a media fila ni partiendo un bloque):
-  //    una cotización normal cabe en 1 hoja; una larga fluye a 2+ hojas Carta.
-  var holder = document.createElement('div');
-  holder.className = '_pdfholder';
-  holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:816px;background:#fff;z-index:-1';
+  // ── PDF en hojas CARTA, responsivo y a sangre ─────────────────────────
+  // Se captura la tarjeta REAL (que pinta bien) y se reparte en hojas Carta
+  // exactas, a sangre (ancho completo, sin marco). Los cortes caen SIEMPRE
+  // entre filas o secciones completas (nunca a media fila), así que una
+  // cotización corta sale en 1 hoja y una larga fluye a 2+ hojas limpias.
 
-  var styleEl = document.createElement('style');
-  styleEl.textContent =
-    '._pdfholder .quote-card{width:100%!important;border:none!important;border-radius:0!important;box-shadow:none!important;margin:0!important}\n'
-    + _cssImpresionScoped('._pdfholder')
-    // Las tablas SÍ pueden repartirse entre hojas, pero cada fila se mantiene
-    // completa (nunca se parte una fila a la mitad).
-    + '\n._pdfholder table.qt{page-break-inside:auto!important}'
-    + '\n._pdfholder table.qt tr{page-break-inside:avoid!important}';
-  document.head.appendChild(styleEl);
+  // Ocultar temporalmente controles de edición que no van en el PDF.
+  var toHide = document.querySelectorAll('.customizer, .extras-section, .sph-remove, .extra-del, .sph-arrow, .proc-add-btn, .cat-chips');
+  toHide.forEach(function(el){ el.dataset.ph = el.style.display; el.style.display = 'none'; });
 
-  var clone = card.cloneNode(true);
-  // Quitar del clon los controles de edición que no van en el PDF.
-  clone.querySelectorAll('.customizer, .extras-section, .sph-remove, .extra-del, .sph-arrow, .proc-add-btn, .cat-chips').forEach(function(el){ el.remove(); });
-  clone.classList.remove('print-scale');
-  holder.appendChild(clone);
-  document.body.appendChild(holder);
+  // Desactivar el zoom de "print-scale" (ya no lo necesitamos: paginamos bien).
+  var hadScale = card.classList.contains('print-scale');
+  if (hadScale) card.classList.remove('print-scale');
 
-  function _cleanup(){
-    try { document.head.removeChild(styleEl); } catch(e){}
-    try { document.body.removeChild(holder); } catch(e){}
+  // Quitar marco/sombra/esquinas para que salga a sangre.
+  var _pr = card.style.borderRadius, _pb = card.style.border, _ps = card.style.boxShadow;
+  card.style.borderRadius = '0'; card.style.border = 'none'; card.style.boxShadow = 'none';
+
+  function _restaurar(){
+    toHide.forEach(function(el){ el.style.display = el.dataset.ph || ''; });
+    card.style.borderRadius = _pr; card.style.border = _pb; card.style.boxShadow = _ps;
+    if (hadScale) card.classList.add('print-scale');
   }
 
-  var opt = {
-    margin: 0,
-    image: { type:'jpeg', quality:0.98 },
-    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false, windowWidth:816 },
-    jsPDF: { unit:'mm', format:'letter', orientation:'portrait' },
-    pagebreak: { mode:['css','legacy'], avoid:['tr', '.grand-total', '.terminos', '.q-footer'] }
-  };
+  // Puntos de corte seguros (en px CSS desde el tope de la tarjeta): el inicio
+  // de cada sección y de cada fila de tabla. Se omite la 1ª fila de cada tabla
+  // para no dejar un encabezado de sección solo al pie de una hoja.
+  var cardRect = card.getBoundingClientRect();
+  var cardTop = cardRect.top, cardH = cardRect.height;
+  var bps = [0];
+  card.querySelectorAll('.q-sec-title, .grand-total, .terminos, .q-footer, .q-notes').forEach(function(el){
+    bps.push(el.getBoundingClientRect().top - cardTop);
+  });
+  card.querySelectorAll('table.qt').forEach(function(tbl){
+    var rows = tbl.querySelectorAll('tr');
+    for (var i=1; i<rows.length; i++){   // desde la 2ª fila
+      bps.push(rows[i].getBoundingClientRect().top - cardTop);
+    }
+  });
+  bps.push(cardH);
+  // Ordenar y quitar duplicados / fuera de rango.
+  bps = bps.filter(function(v){ return v>=0 && v<=cardH; })
+           .sort(function(a,b){ return a-b; })
+           .filter(function(v,i,arr){ return i===0 || v-arr[i-1] > 1; });
 
-  if (!window.html2pdf) { _cleanup(); callback(new Error('html2pdf no disponible')); return; }
+  html2canvas(card, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    logging: false
+  }).then(function(canvas) {
+    _restaurar();
 
-  window.html2pdf().set(opt).from(clone).toPdf().get('pdf').then(function(pdf){
-    var blob = pdf.output('blob');
-    _cleanup();
-    callback(null, blob);
+    var pageW = 215.9, pageH = 279.4;                 // Carta (mm)
+    var pxPerCss = canvas.height / cardH;              // factor px-canvas por px-CSS
+    var pxPerMm  = canvas.width / pageW;               // px-canvas por mm (a sangre)
+    var pageHpx  = pageH * pxPerMm;                    // alto de una hoja en px-canvas
+
+    // Breakpoints en px-canvas.
+    var cuts = bps.map(function(v){ return Math.round(v * pxPerCss); });
+    var endPx = canvas.height;
+
+    var pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, pageH], orientation:'portrait' });
+
+    var start = 0, first = true, guard = 0;
+    while (start < endPx - 1 && guard < 60) {
+      guard++;
+      var limit = start + pageHpx;
+      var end;
+      if (limit >= endPx) {
+        end = endPx;                                   // última hoja: hasta el final
+      } else {
+        // mayor breakpoint que quepa en esta hoja (y avance respecto a start)
+        end = -1;
+        for (var i=0;i<cuts.length;i++){ if (cuts[i] > start + 2 && cuts[i] <= limit) end = cuts[i]; }
+        if (end < 0) end = Math.floor(limit);          // fila más alta que una hoja: corte duro
+      }
+      var sliceH = end - start;
+
+      // Recortar la rebanada a su propio canvas.
+      var tmp = document.createElement('canvas');
+      tmp.width = canvas.width; tmp.height = sliceH;
+      var ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+      ctx.drawImage(canvas, 0, start, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      var imgData = tmp.toDataURL('image/jpeg', 0.98);
+
+      var imgW = pageW;                                // ancho completo (a sangre)
+      var imgH = sliceH / pxPerMm;                     // alto real de la rebanada en mm (≤ pageH)
+
+      if (!first) pdf.addPage([pageW, pageH], 'portrait');
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
+      first = false;
+      start = end;
+    }
+
+    callback(null, pdf.output('blob'));
   }).catch(function(err){
-    _cleanup();
+    _restaurar();
     callback(err);
   });
 }
