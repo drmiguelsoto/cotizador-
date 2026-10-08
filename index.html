@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07j · Recomendaciones preop reescritas de USTED (resto del ecosistema) · Cómo llegar personalizada · 3 bloques Zorvix · sin API key -->
+<!-- COTIZADOR · v2026-10-07k · PDF multipagina en Carta UNIFORME (una hoja se ajusta al contenido, varias van en Carta completa) · Recom de usted · Como llegar con nombre · 3 bloques Zorvix · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1852,7 +1852,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07j · Recomendaciones de usted';
+var COTIZADOR_VERSION = 'v2026-10-07k · PDF multipágina en Carta uniforme';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3660,9 +3660,13 @@ function capturar(card, callback) {
       start = end;
     }
 
-    // 2) Cada hoja se dimensiona al ALTO de su contenido (ancho Carta, a sangre).
-    //    Así NO queda hueco blanco: una cotización corta ocupa una hoja a su
-    //    medida, y si es larga se reparte en varias hojas (cada una ≤ Carta).
+    // 2) Dimensionar las hojas.
+    //    • Si TODO cabe en UNA hoja: esa hoja se ajusta al alto del contenido
+    //      (sin hueco blanco abajo).
+    //    • Si se necesitan VARIAS hojas: TODAS van en Carta completa y uniforme
+    //      (mismas dimensiones), para que no se vean descuadradas ni de tamaños
+    //      distintos. El contenido se coloca arriba en cada hoja.
+    var multiPagina = slices.length > 1;
     var pdf = null;
     slices.forEach(function(sl){
       var s0 = sl[0], s1 = sl[1], sliceH = s1 - s0;
@@ -3675,12 +3679,20 @@ function capturar(card, callback) {
       ctx.drawImage(canvas, 0, s0, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
       var imgData = tmp.toDataURL('image/jpeg', 0.98);
 
-      var imgW = pageW;                                // ancho completo (a sangre)
-      var imgH = Math.min(sliceH / pxPerMm, pageH);    // alto de ESTA hoja = su contenido
+      var imgW = pageW;                                 // ancho completo (a sangre)
+      var contentHmm = sliceH / pxPerMm;                // alto real del contenido
+      // Alto de la hoja: Carta completa si hay varias páginas; al contenido si es una sola.
+      var pageHmm = multiPagina ? pageH : Math.min(contentHmm, pageH);
+      // Orientación según la forma REAL de la hoja: si el alto es menor que el
+      // ancho (hoja corta ajustada al contenido), hay que declararla "landscape"
+      // para que jsPDF NO gire las dimensiones; si no, se mantiene "portrait".
+      var orient = (pageHmm >= pageW) ? 'portrait' : 'landscape';
 
-      if (!pdf) pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, imgH], orientation:'portrait' });
-      else pdf.addPage([pageW, imgH], 'portrait');
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
+      if (!pdf) pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, pageHmm], orientation: orient });
+      else pdf.addPage([pageW, pageHmm], orient);
+      // El contenido se dibuja arriba (a sangre en ancho); si la hoja es Carta
+      // y el contenido es menor, el resto queda en blanco (como un documento normal).
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, contentHmm);
     });
 
     if (!pdf) pdf = new window.jspdf.jsPDF({ unit:'mm', format:[pageW, pageH], orientation:'portrait' });
