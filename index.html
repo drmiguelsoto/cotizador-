@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-07h · + Boton "Como llegar" (hoja ubicacion Zorvix brandeada MS) · PDF Carta ajustado al contenido · 3 bloques Zorvix · sin API key -->
+<!-- COTIZADOR · v2026-10-07i · Hoja "Como llegar" personalizada con nombre del paciente · PDF Carta ajustado · 3 bloques Zorvix · sin API key -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1852,7 +1852,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-07h · + Cómo llegar + PDF Carta ajustado';
+var COTIZADOR_VERSION = 'v2026-10-07i · Cómo llegar personalizada';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3973,6 +3973,8 @@ function _construirRecomendacionesPDF(nombrePac) {
 //  Mismo encabezado/monograma que Recomendaciones. No es por paciente.
 // ══════════════════════════════════════════════════════
 function descargarComoLlegar() {
+  var nombrePac = (document.getElementById('p-nombre') &&
+                   document.getElementById('p-nombre').value || '').trim();
   function conJsPDF(cb){
     if (window.jspdf && window.jspdf.jsPDF) { cb(); return; }
     var sj = document.createElement('script');
@@ -3982,12 +3984,12 @@ function descargarComoLlegar() {
     document.head.appendChild(sj);
   }
   conJsPDF(function(){
-    try { _construirComoLlegarPDF(); }
+    try { _construirComoLlegarPDF(nombrePac); }
     catch(e){ console.error('[ComoLlegar]', e); toast('No se pudo generar la hoja: ' + e.message,'error'); }
   });
 }
 
-function _construirComoLlegarPDF() {
+function _construirComoLlegarPDF(nombrePac) {
   var doc = new window.jspdf.jsPDF({ unit:'pt', format:'letter' });
   var PW = doc.internal.pageSize.getWidth();
   var PH = doc.internal.pageSize.getHeight();
@@ -4070,6 +4072,15 @@ function _construirComoLlegarPDF() {
   doc.text('Consultorio: Miramontes 2342, Coyoacán, CDMX', PW-MX, 64, {align:'right'});
   y = 96 + 26;
 
+  // ── Personalización (nombre del paciente) ──
+  if (nombrePac) {
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(COL_MID[0],COL_MID[1],COL_MID[2]);
+    doc.setCharSpace(1.2); doc.text('PREPARADO PARA', MX, y); doc.setCharSpace(0);
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(COL_DARK[0],COL_DARK[1],COL_DARK[2]);
+    doc.text(nombrePac, MX, y+15);
+    y += 15 + 16;
+  }
+
   // ── Intro ──
   parrafo('Sus procedimientos quirúrgicos se realizan en el Centro Quirúrgico Zorvix, en el corazón de la Colonia del Valle. Aquí encontrará todo lo necesario para llegar sin contratiempos el día de su cirugía.', {dark:true});
   y += 2;
@@ -4121,7 +4132,7 @@ function _construirComoLlegarPDF() {
     doc.text('Página ' + p + ' de ' + total, PW-MX, PH-26, {align:'right'});
   }
 
-  doc.save('Como Llegar - Dr. Miguel Soto (Zorvix).pdf');
+  doc.save('Como Llegar - Dr. Miguel Soto (Zorvix)' + (nombrePac ? ' - ' + nombrePac : '') + '.pdf');
   toast('✓ Hoja "Cómo llegar" generada.','success');
 }
 
