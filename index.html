@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-09 · Busqueda GLOBAL de procedimientos (todos los modulos y categorias a la vez) · PDF Carta uniforme · Recom usted · Como llegar con nombre · 3 bloques Zorvix -->
+<!-- COTIZADOR · v2026-10-16 · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -172,7 +172,13 @@ header{grid-column:1/-1;background:var(--black);color:var(--white);display:flex;
 .bk-toggle{width:16px;height:16px;accent-color:var(--black);cursor:pointer;margin:0}
 .bk-label{font-size:12px;font-weight:400;color:var(--black);display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .bk-badge{font-size:9px;background:#F0E8DC;color:var(--accent);border-radius:var(--r);padding:2px 7px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
-.bk-amt{font-size:12px;font-weight:600;color:var(--black);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;min-width:100px}
+.bk-amt{font-size:12px;font-weight:600;color:var(--black);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;min-width:100px;display:flex;align-items:center;justify-content:flex-end;gap:3px}
+.bk-amt-cur{font-size:11px;color:var(--mid)}
+.bk-amt-input{width:94px;font-size:12px;font-weight:600;color:var(--black);text-align:right;font-variant-numeric:tabular-nums;background:var(--cream);border:1px solid var(--border);border-radius:4px;padding:3px 7px;font-family:inherit;outline:none}
+.bk-amt-input:focus{border-color:var(--stone);background:#fff}
+.sph-name-input{font-size:13px;font-weight:600;letter-spacing:.3px;color:var(--white);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:3px 8px;font-family:inherit;outline:none;width:100%;max-width:340px}
+.sph-name-input:focus{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.45)}
+.sph-name-input::placeholder{color:rgba(255,255,255,.5)}
 
 /* Extras section (dentro del customizer) */
 .extras-section{margin-top:14px;padding:14px 16px;background:var(--white);border:1px solid var(--border);border-radius:var(--r)}
@@ -1852,7 +1858,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-09 · Búsqueda global de procedimientos';
+var COTIZADOR_VERSION = 'v2026-10-16 · Cirugía editable (nombre + montos)';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -1993,15 +1999,24 @@ function makeBreakdown(p, idx) {
 function recalcDiscounts(s, idx) {
   const p = s.proc;
   const isFirst = idx===0;
-  s.breakdown.qx.v = isFirst ? p.qx : Math.round(p.qx*0.5);
-  s.breakdown.qx.discount = !isFirst;
-  s.breakdown.anest.v = isFirst ? p.anest : 1500;
-  s.breakdown.anest.discount = !isFirst;
+  // Un componente editado a mano (.manual) queda FIJO: el recálculo no lo pisa.
+  if (!s.breakdown.qx.manual) {
+    s.breakdown.qx.v = isFirst ? p.qx : Math.round(p.qx*0.5);
+    s.breakdown.qx.discount = !isFirst;
+  }
+  if (!s.breakdown.anest.manual) {
+    s.breakdown.anest.v = isFirst ? p.anest : 1500;
+    s.breakdown.anest.discount = !isFirst;
+  }
   // VPO y VPA solo en la 1ª cirugía (cargo único por paciente):
-  s.breakdown.vpo.v = isFirst ? p.vpo : 0;
-  s.breakdown.vpo.on = isFirst && p.vpo > 0;
-  s.breakdown.vpa.v = isFirst ? p.vpa : 0;
-  s.breakdown.vpa.on = isFirst && p.vpa > 0;
+  if (!s.breakdown.vpo.manual) {
+    s.breakdown.vpo.v = isFirst ? p.vpo : 0;
+    s.breakdown.vpo.on = isFirst && p.vpo > 0;
+  }
+  if (!s.breakdown.vpa.manual) {
+    s.breakdown.vpa.v = isFirst ? p.vpa : 0;
+    s.breakdown.vpa.on = isFirst && p.vpa > 0;
+  }
 }
 
 // La noche de hospitalización es un cargo ÚNICO por evento quirúrgico, no por
@@ -2061,6 +2076,33 @@ function toggleBreakdownComponent(idx, key) {
   }
   selected[idx].breakdown[key].on = !selected[idx].breakdown[key].on;
   console.log('[Breakdown] Toggle', selected[idx].proc.n, key, '→', selected[idx].breakdown[key].on);
+  renderQuote();
+}
+
+// Editar el NOMBRE de un procedimiento cargado (p.ej. cargar "Mastopexia" y
+// renombrarla a "Pexia de glúteo"). Se clona s.proc para NO alterar el catálogo.
+function editProcName(idx, val) {
+  var s = selected[idx];
+  if (!s) return;
+  var nombre = (val || '').trim();
+  if (!nombre) return;                       // no permitir nombre vacío
+  s.proc = Object.assign({}, s.proc);        // copia: no toca el catálogo original
+  s.proc.n = nombre;
+  s.proc.custom = true;                       // marca: procedimiento editado a mano
+  renderQuote();
+}
+
+// Editar el MONTO de un componente del desglose (p.ej. cambiar la faja por un
+// bra, que cuesta distinto). Al editar, el componente queda FIJO (.manual) para
+// que no se pierda al recalcular, y se enciende si se le pone un valor.
+function editBreakdownValue(idx, key, val) {
+  var s = selected[idx];
+  if (!s || !s.breakdown || !s.breakdown[key]) return;
+  var n = Math.max(0, Math.round(parseFloat(val) || 0));
+  s.breakdown[key].v = n;
+  s.breakdown[key].manual = true;            // fija el valor editado
+  s.breakdown[key].discount = false;         // ya no es el automático 50%/+1500
+  if (n > 0) s.breakdown[key].on = true;     // si le pones monto, se activa
   renderQuote();
 }
 
@@ -2782,7 +2824,7 @@ function buildBreakdownPanels(grandSub, disc) {
   let html = '<div class="customizer">';
   if (selected.length) {
     html += '<div class="customizer-title">✎ Personalizar Desglose de Cirugía</div>';
-    html += '<div class="customizer-hint">Click en cualquier renglón para activar/desactivar un componente. Ej: si con una sola faja cubres varias cirugías, desactiva las fajas que no uses. El total se actualiza solo.</div>';
+    html += '<div class="customizer-hint">Todo es editable: cambia el <b>nombre</b> del procedimiento (p.ej. carga «Mastopexia» y renómbrala a «Pexia de glúteo») y edita el <b>monto</b> de cualquier componente (p.ej. cambia la faja por un bra). El check de la izquierda activa/desactiva el componente. El total se actualiza solo.</div>';
     html += '<div class="sel-procs">';
 
     selected.forEach(function(s, idx) {
@@ -2793,7 +2835,7 @@ function buildBreakdownPanels(grandSub, disc) {
       html += '<div class="sel-proc-block" data-idx="'+idx+'">';
       html += '<div class="sph">'+
         '<div class="sph-num">'+(idx+1)+'</div>'+
-        '<div class="sph-info"><div class="sph-name">'+escapeHtml(s.proc.n)+'</div><div class="sph-cat">'+escapeHtml(s.proc.cat)+'</div></div>'+
+        '<div class="sph-info"><input class="sph-name-input" value="'+escapeHtml(s.proc.n)+'" title="Editar el nombre del procedimiento" onclick="event.stopPropagation()" onchange="editProcName('+idx+',this.value)"><div class="sph-cat">'+escapeHtml(s.proc.cat)+'</div></div>'+
         '<div class="sph-total">'+fmt(procTotal)+'</div>'+
         '<span class="sph-remove" title="Quitar procedimiento" onclick="removeProc('+idx+')">✕</span>'+
         '</div>';
@@ -2801,18 +2843,21 @@ function buildBreakdownPanels(grandSub, disc) {
       html += '<div class="breakdown">';
       KEYS.forEach(function(k) {
         const item = bk[k];
-        if (!item || !item.v || item.v === 0) return;
+        // Mostrar el renglón si está activo O si tiene valor (>0). Así un componente
+        // editado a 0 sigue visible para poder re-editarlo.
+        if (!item || (!item.on && !((item.v || 0) > 0))) return;
         const badge = item.discount
           ? '<span class="bk-badge">'+(k==='qx'?'50% por 2ª cirugía':'+$1,500 fijo')+'</span>'
           : '';
-        // Onclick inline en el <label> para que SIEMPRE funcione, sin depender de event delegation.
-        // El click hace toggle del estado .on y dispara re-render.
-        html += '<label class="bk-row'+(item.on?'':' disabled')+'" '
-          + 'onclick="event.preventDefault();toggleBreakdownComponent('+idx+',\''+k+'\')">'
-          + '<input type="checkbox" class="bk-toggle"'+(item.on?' checked':'')+' tabindex="-1" onclick="event.preventDefault()">'
-          + '<span class="bk-label">'+escapeHtml(item.label)+badge+'</span>'
-          + '<span class="bk-amt">'+fmt(item.v)+'</span>'
-          + '</label>';
+        // El checkbox y la etiqueta hacen toggle; el monto es un input editable
+        // (cambiar, por ejemplo, la faja por un bra que cuesta distinto).
+        html += '<div class="bk-row'+(item.on?'':' disabled')+'">'
+          + '<input type="checkbox" class="bk-toggle"'+(item.on?' checked':'')+' onclick="toggleBreakdownComponent('+idx+',\''+k+'\')">'
+          + '<span class="bk-label" onclick="toggleBreakdownComponent('+idx+',\''+k+'\')">'+escapeHtml(item.label)+badge+'</span>'
+          + '<span class="bk-amt"><span class="bk-amt-cur">$</span>'
+          +   '<input type="number" class="bk-amt-input" value="'+(Math.round(item.v)||0)+'" min="0" step="1" aria-label="Monto" onchange="editBreakdownValue('+idx+',\''+k+'\',this.value)">'
+          + '</span>'
+          + '</div>';
       });
       html += '</div>';
 
