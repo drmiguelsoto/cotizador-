@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-10-16 · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
+<!-- COTIZADOR · v2026-11-07 · Firma electrónica de aceptación (firma.miguelsotomd.com) · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -855,7 +855,7 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
   <div class="hist-panel">
     <div class="sec-lbl" style="margin-bottom:8px"><span>Cotizaciones Guardadas</span><span class="lbl-count" id="hist-count"></span></div>
     <div style="margin-bottom:8px">
-      <input type="text" id="hist-search" placeholder="🔍 Buscar por nombre o código..." onfocus="cargarEstadosPago()" oninput="histSearch=this.value;renderHistory()" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-size:11px;font-family:inherit;background:var(--cream);color:var(--black)">
+      <input type="text" id="hist-search" placeholder="🔍 Buscar por nombre o código..." onfocus="cargarEstadosPago();cargarEstadosFirma()" oninput="histSearch=this.value;renderHistory()" style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-size:11px;font-family:inherit;background:var(--cream);color:var(--black)">
     </div>
     <div id="history-list"><div class="no-hist">No hay cotizaciones guardadas aún.</div></div>
   </div>
@@ -1737,6 +1737,7 @@ async function _historialSyncFromDrive() {
     _historialSetMode('online');
     console.log('[Historial] Cargado desde Drive:', qHistory.length, 'cotizaciones, counter=' + qCounter);
     if (typeof cargarEstadosPago === 'function') cargarEstadosPago();
+    if (typeof cargarEstadosFirma === 'function') cargarEstadosFirma();
   } catch (err) {
     console.warn('[Historial] Error sincronizando desde Drive:', err);
     _historialSetMode('offline', 'Sin conexión');
@@ -2759,7 +2760,7 @@ function renderQuote() {
     }
   }
   html+='<div class="grand-total"><span class="gt-lbl">Gran Total</span><span class="gt-amt">'+fmt(grandTot)+'</span></div>';
-  html+='<div class="terminos"><b>Términos y condiciones</b>Este presupuesto solo ampara los procedimientos descritos; en caso de algún cambio en el plan quirúrgico, éste será modificado.<br>Este presupuesto tiene vigencia únicamente por el año en el que se entrega.<br>La fecha de la cirugía solo está en firme apartando el espacio quirúrgico con un anticipo de <b style="display:inline">$10,000</b>.<br>Una vez realizado el apartado no hay devolución.</div>';
+  html+='<div class="terminos"><b>Términos y condiciones</b>Este presupuesto solo ampara los procedimientos descritos; en caso de algún cambio en el plan quirúrgico, éste será modificado.<br>Este presupuesto tiene vigencia únicamente por el año en el que se entrega.<br>La fecha de la cirugía solo está en firme apartando el espacio quirúrgico con un anticipo de <b style="display:inline">$10,000</b>, que se aplica al total de este presupuesto.<br>Si usted cancela: con más de 30 días de anticipación se reembolsa el 50% del anticipo; entre 30 y 15 días, el 25%; con menos de 15 días no hay reembolso. En cualquier caso puede conservar el 100% como crédito para una nueva fecha dentro de 12 meses, transferible a un familiar o amigo.<br>La aceptación de este presupuesto se formaliza con su firma electrónica.</div>';
 
   body.innerHTML = html;
 
@@ -3098,6 +3099,16 @@ function renderHistory(){
       var _tip = _ep && _ep.montoPagado ? 'Pagado: ' + fmt(_ep.montoPagado) + (_ep.fechaPago ? ' · ' + _ep.fechaPago : '') : 'Sin pagos registrados';
       payBadge = '<span title="' + _tip + '" style="font-size:8px;letter-spacing:1px;background:' + _pb.bg + ';color:' + _pb.color + ';padding:2px 7px;border-radius:2px;margin-left:6px;border:1px solid ' + (_pb.bg === 'var(--cream)' ? 'var(--border)' : _pb.bg) + '">' + _pb.label + '</span>';
     }
+    var _ef = (_estadosFirma && _estadosFirma[h.id]) ? _estadosFirma[h.id] : null;
+    var firmaBadge = '';
+    if (_ef && _ef.estado === 'firmada') {
+      firmaBadge = '<span title="Firmada ' + (_ef.fechaFirma ? new Date(_ef.fechaFirma).toLocaleString('es-MX') : '') + ' · ' + _ef.folio + '" style="font-size:8px;letter-spacing:1px;background:#fff;color:#0f9d58;border:1px solid #0f9d58;padding:1px 6px;border-radius:2px;margin-left:6px">✍ FIRMADA</span>';
+    } else if (_ef && _ef.estado === 'pendiente') {
+      firmaBadge = '<span title="Liga enviada · abierta ' + (_ef.aperturas || 0) + ' vez(es)" style="font-size:8px;letter-spacing:1px;background:#fff;color:#b07d10;border:1px solid #d4a017;padding:1px 6px;border-radius:2px;margin-left:6px">✍ POR FIRMAR' + (_ef.aperturas ? ' · VISTA' : '') + '</span>';
+    }
+    var firmaBtn = (!esSustituida && !(_ef && _ef.estado === 'firmada'))
+      ? '<div class="del-hist" style="color:#6B6059" onclick="event.stopPropagation();enviarAFirma('+i+')" title="Enviar liga de firma por WhatsApp">✍ ' + (_ef && _ef.estado === 'pendiente' ? 'reenviar firma' : 'enviar a firma') + '</div>'
+      : '';
     var aceptarBtn = esSustituida
       ? '<div class="del-hist" style="color:#8a7b6c" title="Reemplazada por ' + (h.sustituidaPor||'') + '">↳ ' + (h.sustituidaPor||'sustituida') + '</div>'
       : !esAceptada
@@ -3111,11 +3122,12 @@ function renderHistory(){
       : '';
     return '<div class="hist-item">'+
       '<div style="flex:1;cursor:pointer;min-width:0" onclick="loadQuote('+i+')">'+
-        '<div class="h-name">'+h.nombre+statusBadge+payBadge+'</div>'+
+        '<div class="h-name">'+h.nombre+statusBadge+payBadge+firmaBadge+'</div>'+
         '<div class="h-meta">'+h.id+' · '+h.fecha+' · '+(h.selected?h.selected.length:0)+' proc.</div>'+
       '</div>'+
       '<div style="text-align:right;flex-shrink:0">'+
         '<div class="h-amt">'+fmt(h.total)+'</div>'+
+        firmaBtn+
         aceptarBtn+
         sustituirBtn+
         reRegBtn+
@@ -3157,6 +3169,23 @@ function marcarAceptada(i) {
       );
     }
   };
+
+  // Aviso de FIRMA: si la paciente no ha firmado, se advierte (no bloquea).
+  var _efA = _estadosFirma[h.id];
+  if (!(_efA && _efA.estado === 'firmada')) {
+    clearTimeout(_safety);
+    confirmDialog(
+      'Sin firma de aceptación',
+      (h.sexo === 'M' ? 'El paciente ' : 'La paciente ') + h.nombre + ' aún no ha firmado los términos de anticipo de ' + h.id +
+      '. Sin firma, la política de cancelación es difícil de sostener. ¿Marcarla aceptada de todas formas? (Recomendado: primero "✍ enviar a firma")',
+      function(){
+        _safety = setTimeout(function(){ _accepting = false; }, 20000);
+        try { _buscarCotizacionPreviaPendiente(h, proceder); } catch (e) { proceder(null); }
+      },
+      function(){ _accepting = false; }
+    );
+    return;
+  }
 
   // El GUARDIA NUNCA debe bloquear la aceptación: cualquier fallo → flujo normal.
   try {
@@ -3300,6 +3329,7 @@ function _mostrarGuardiaDialog(h, previa, cb) {
     if (now - _lastBadgeRefresh < 8000) return;
     _lastBadgeRefresh = now;
     if (typeof cargarEstadosPago === 'function') cargarEstadosPago();
+    if (typeof cargarEstadosFirma === 'function') cargarEstadosFirma();
   });
 })();
 
@@ -4477,7 +4507,9 @@ function enviarEmailConPDF() {
     'Condiciones:\n' +
     '  • Este presupuesto ampara únicamente los procedimientos descritos.\n' +
     '  • Vigencia: año en curso.\n' +
-    '  • La fecha de cirugía se confirma con un anticipo de $10,000 (no reembolsable).\n\n' +
+    '  • La fecha de cirugía se confirma con un anticipo de $10,000, aplicable al total.\n' +
+    '  • Política de cancelación: más de 30 días antes, se reembolsa el 50% del anticipo; entre 30 y 15 días, el 25%; menos de 15 días, sin reembolso. Puede conservar el 100% como crédito por 12 meses, transferible a un familiar o amigo.\n' +
+    '  • Le enviaremos una liga para firmar electrónicamente su aceptación.\n\n' +
     'Use el botón de abajo para descargar su cotización completa en PDF.\n\n' +
     'Quedo a sus órdenes para cualquier duda.\n\n' +
     'Atentamente,\n' +
@@ -5414,6 +5446,52 @@ function confirmDialog(title, msg, onOk, onCancel) {
   cancel.onclick = function(){close();onCancel&&onCancel();};
   bg.onclick = function(e){if(e.target===bg){close();onCancel&&onCancel();}};
 }
+// ══════════════════════════════════════════════════════
+//  FIRMA ELECTRÓNICA DE ACEPTACIÓN (firma.miguelsotomd.com)
+//  Backend propio y sellado (Apps Script "Firmas de Presupuestos").
+// ══════════════════════════════════════════════════════
+const FIRMA_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbyMndG6eZdOEq1aqRymw-BRDYKwjaJoKorZ7QoiMgSAG4iXXMf0FHvEBbN1YiT_dtmE/exec';
+var _estadosFirma = {};
+var _estadosFirmaFetching = false;
+
+async function cargarEstadosFirma(){
+  if (!FIRMA_GATEWAY_URL || FIRMA_GATEWAY_URL.indexOf('%%') === 0 || _estadosFirmaFetching) return;
+  _estadosFirmaFetching = true;
+  try {
+    var r = await fetch(FIRMA_GATEWAY_URL + '?action=estado', { redirect: 'follow' });
+    var d = await r.json();
+    if (d && d.ok) { _estadosFirma = d.estados || {}; if (typeof renderHistory === 'function') renderHistory(); }
+  } catch (e) { console.warn('[Firma] No se pudo cargar estados:', e.message); }
+  finally { _estadosFirmaFetching = false; }
+}
+
+async function enviarAFirma(i){
+  var h = qHistory[i];
+  if (!h) return;
+  var tel = String(h.tel || '').replace(/\D/g, '');
+  if (tel.length < 10) { toast('La cotización no tiene teléfono de ' + h.nombre + '. Cárgala, elígela de la base de pacientes y vuelve a guardar.','error'); return; }
+  toast('Generando liga de firma…','success');
+  try {
+    var cot = Object.assign({}, h, { anticipo: 10000, pdfLink: h.pdf_link || '' });
+    var r = await fetch(FIRMA_GATEWAY_URL, { method:'POST', body: JSON.stringify({
+      action:'crearSolicitud', cotizacion: cot, createdBy: (function(){ try { var ss = _authGetSession(); return (ss && ss.email) || ''; } catch(e){ return ''; } })() }) });
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error desconocido');
+    if (d.yaFirmada) { toast(h.id + ' ya está firmada (' + d.folio + ').','success'); cargarEstadosFirma(); return; }
+    var tel10 = tel.slice(-10);
+    var msg = (h.sexo === 'M' ? 'Estimado' : 'Estimada') + ' ' + h.nombre.split(' ')[0] + ', le compartimos su presupuesto ' + h.id +
+      ' del Dr. Miguel Soto para su revisión y firma electrónica de aceptación:\n\n' + d.url +
+      '\n\nAl firmar, confirma los términos de apartado y anticipo. Para cualquier duda estamos al 55 6223 4133.';
+    try { await navigator.clipboard.writeText(d.url); } catch (e) {}
+    window.open('https://wa.me/52' + tel10 + '?text=' + encodeURIComponent(msg), '_blank');
+    toast('✓ Liga ' + d.folio + (d.reutilizada ? ' (misma liga vigente)' : '') + ' copiada y abierta en WhatsApp.','success');
+    _estadosFirma[h.id] = { estado:'pendiente', folio:d.folio, aperturas:0, url:d.url };
+    renderHistory();
+  } catch (e) {
+    toast('⚠ No se pudo generar la liga de firma: ' + e.message,'error');
+  }
+}
+
 // ══════════════════════════════════════════════════════
 //  INTEGRACIÓN CON SISTEMA DE COBROS
 //  Al marcar ACEPTADA, escribe a 2 pestañas del Sheet de cobros.
