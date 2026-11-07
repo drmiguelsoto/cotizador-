@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Miguel Soto — Pacientes</title>
+<meta name="description" content="Su espacio de paciente: cotización, indicaciones, receta y citas.">
+<meta name="theme-color" content="#030707">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MS Pacientes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  :root {
+    --tinta: #030707;
+    --taupe: #A19487;
+    --taupe-osc: #6F6458;   /* taupe con contraste suficiente para texto pequeño */
+    --crema: #F4F2F1;
+    --papel: #FBFAF9;
+    --linea: #DDD6CF;
+    --error: #8A2A1F;
+    --serif: 'Cormorant Garamond', Georgia, serif;
+    --sans: 'Jost', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--crema); color: var(--tinta);
+    font: 400 17px/1.55 var(--sans);
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+  }
+  .marco { max-width: 460px; margin: 0 auto; padding: 0 24px calc(40px + env(safe-area-inset-bottom)); min-height: 100dvh; display: flex; flex-direction: column; }
+  [hidden] { display: none !important; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--taupe); outline-offset: 3px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .pantalla { animation: entra .35s ease-out; }
+    @keyframes entra { from { opacity: 0; transform: translateY(6px); } }
+  }
+
+  /* Firma: el monograma y el nombre, siempre arriba */
+  .firma { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 0; }
+  .mono { display: block; height: 40px; width: auto; }
+  .logo-h { display: block; height: 58px; width: auto; max-width: 70vw; }
+  .cargando .mono { height: 72px; animation: late 1.6s ease-in-out infinite; }
+  @keyframes late { 50% { opacity: .45; } }
+  .pasos { margin: 10px 0 4px; padding-left: 20px; line-height: 1.55; }
+  .pasos li { margin: 4px 0; }
+  .ico { display: inline-block; min-width: 1.3em; text-align: center; font-weight: 600; }
+  .enlace { background: none; border: 0; padding: 8px 0; font-size: 15px; color: var(--taupe-osc); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+
+  /* Bienvenida */
+  .portada { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 48px 0 24px; }
+  h1 { font: 500 clamp(44px, 13vw, 58px)/1.02 var(--serif); letter-spacing: -.01em; }
+  h1 em { font-style: italic; color: var(--taupe-osc); }
+  .bajada { margin-top: 18px; max-width: 32ch; color: #3B3835; }
+  h2 { font: 500 34px/1.1 var(--serif); }
+
+  form { margin-top: 36px; }
+  label { display: block; font-size: 15px; color: #3B3835; margin-bottom: 8px; }
+  .campo { display: flex; align-items: stretch; border-bottom: 1.5px solid var(--tinta); }
+  .prefijo { font: 500 26px/1 var(--serif); padding: 14px 10px 12px 0; color: var(--taupe-osc); }
+  .campo input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 12px 0; font: 500 26px/1 var(--serif); letter-spacing: .03em; }
+  .campo input:focus { outline: none; }
+  .campo:focus-within { border-bottom-color: var(--taupe); }
+  .codigo input { letter-spacing: .5em; font-size: 34px; }
+  .error { color: var(--error); font-size: 15px; margin-top: 12px; min-height: 1.4em; }
+  .nota { font-size: 15px; color: #57524D; margin-top: 14px; }
+
+  .boton {
+    display: flex; width: 100%; justify-content: center; align-items: center; gap: 10px;
+    margin-top: 28px; padding: 17px 20px; border: 0; border-radius: 2px;
+    background: var(--tinta); color: var(--crema); font-weight: 500; letter-spacing: .02em; cursor: pointer;
+    text-decoration: none;
+  }
+  .boton:disabled { opacity: .45; cursor: default; }
+  .boton.claro { background: transparent; color: var(--tinta); border: 1px solid var(--tinta); }
+  .acciones-sec { display: flex; justify-content: space-between; margin-top: 14px; }
+
+  /* Consentimiento */
+  .aviso { margin-top: 20px; max-height: 42dvh; overflow-y: auto; padding: 18px 18px 6px; background: var(--papel); border: 1px solid var(--linea); font-size: 15px; line-height: 1.6; }
+  .aviso p { margin-bottom: 12px; }
+  .casilla { display: flex; gap: 14px; align-items: flex-start; margin-top: 20px; font-size: 16px; line-height: 1.45; cursor: pointer; }
+  .casilla input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--tinta); flex: none; }
+  .casilla small { display: block; color: #57524D; font-size: 14px; margin-top: 3px; }
+
+  /* Inicio */
+  .saludo { padding: 44px 0 8px; }
+  .saludo h1 { font-size: clamp(40px, 11vw, 50px); }
+  .lista { list-style: none; padding: 0; margin-top: 28px; border-top: 1px solid var(--linea); }
+  .lista li { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 20px 0; border-bottom: 1px solid var(--linea); }
+  .lista h3 { font: 500 25px/1.15 var(--serif); }
+  .lista p { grid-column: 1; font-size: 15px; color: #57524D; max-width: 34ch; }
+  .estado { grid-row: 1; grid-column: 2; align-self: center; font-size: 13px; color: var(--taupe-osc); }
+  .lista li.inactivo h3 { color: #6E6964; }
+
+  .ayuda { margin: 36px -24px calc(-40px - env(safe-area-inset-bottom)); padding: 30px 24px calc(40px + env(safe-area-inset-bottom)); background: var(--tinta); color: var(--crema); }
+  .ayuda h2 { font-size: 30px; }
+  .ayuda p { margin-top: 8px; color: #CFC8C1; font-size: 15px; }
+  .ayuda .boton { background: var(--crema); color: var(--tinta); margin-top: 22px; }
+  .ayuda .boton.claro { background: transparent; color: var(--crema); border-color: #5C5650; margin-top: 12px; }
+
+  /* Instalar */
+  .instalar { margin-top: 28px; padding: 16px 18px; border: 1px solid var(--linea); background: var(--papel); font-size: 15px; display: flex; gap: 14px; align-items: flex-start; }
+  .instalar strong { font-weight: 500; }
+  .instalar { flex-wrap: wrap; column-gap: 18px; row-gap: 6px; }
+  .instalar > span { flex: 1 1 100%; }
+  .instalar .enlace { padding: 0; flex: none; }
+  .instalar .guia { flex: 1 1 100%; order: 3; }
+  .instalar strong { font-weight: 600; }
+
+  /* Ajustes */
+  .ajustes .fila { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--linea); }
+  .ajustes .fila p { font-size: 14px; color: #57524D; margin-top: 2px; }
+  .interruptor { position: relative; width: 52px; height: 30px; flex: none; }
+  .interruptor input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+  .interruptor span { position: absolute; inset: 0; border-radius: 15px; background: var(--linea); transition: background .2s; pointer-events: none; }
+  .interruptor span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .interruptor input:checked + span { background: var(--tinta); }
+  .interruptor input:checked + span::after { transform: translateX(22px); }
+  .interruptor input:focus-visible + span { outline: 2px solid var(--taupe); outline-offset: 3px; }
+  .peligro { color: var(--error); }
+  .confirmar { margin-top: 14px; padding: 16px; border: 1px solid var(--error); font-size: 15px; }
+  .version { margin-top: auto; padding-top: 32px; font-size: 13px; color: #8A847E; }
+
+  .cargando { flex: 1; display: grid; place-items: center; }
+
+  /* Inicio: renglones tocables */
+  .lista li.activo { cursor: pointer; }
+  .lista li.activo .estado { color: var(--tinta); }
+  .lista li.activo:focus-visible { outline: 2px solid var(--taupe); outline-offset: 4px; }
+
+  /* Pantallas de detalle */
+  .titulo-detalle { padding: 36px 0 6px; }
+  .vacio { margin-top: 24px; color: #57524D; max-width: 34ch; }
+  .cifra-grande { font: 500 44px/1.05 var(--serif); margin-top: 22px; }
+  .proc { font: 500 26px/1.2 var(--serif); margin-top: 18px; }
+  .cot-tarjeta { padding: 22px 0 24px; border-bottom: 1px solid var(--linea); }
+  .cot-tarjeta:last-of-type { border-bottom: 0; }
+  .cot-tarjeta .proc { margin-top: 0; }
+  .cifra { font: 500 30px/1.1 var(--serif); margin-top: 12px; }
+  .cot-tarjeta .boton { margin-top: 18px; }
+  .meta { font-size: 14px; color: #6E6964; margin-top: 4px; }
+  .renglones { margin-top: 22px; border-top: 1px solid var(--linea); }
+  .renglones div { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--linea); }
+  .renglones dt, .renglones dd { margin: 0; }
+  .renglones dd { font-weight: 500; text-align: right; }
+  .hoja { margin-top: 18px; line-height: 1.6; }
+  .hoja .entrada { color: #57524D; margin: 6px 0 18px; }
+  .hoja h3 { font: 500 22px/1.25 var(--serif); margin: 28px 0 8px; }
+  .hoja h4 { font: 500 18px/1.3 var(--serif); margin: 20px 0 6px; color: #3B3835; }
+  .hoja p { margin: 8px 0; }
+  .hoja ul { margin: 8px 0; padding-left: 20px; }
+  .hoja li { margin: 6px 0; }
+  .hoja .nota { border-left: 2px solid var(--taupe); padding: 6px 0 6px 12px; color: #3B3835; }
+  .hoja table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 15px; }
+  .hoja th, .hoja td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--linea); }
+  .hoja th { font-weight: 600; }
+  .hoja .alarma { color: #8A2B1F; }
+  .hoja ul.alarma { border-left: 2px solid #8A2B1F; padding-left: 26px; }
+  .personal { margin: 14px 0 6px; padding: 14px 16px; border: 1px solid var(--linea); background: var(--papel); font-size: 15px; line-height: 1.5; }
+  .personal p { margin: 2px 0; }
+  .personal .fechas { margin-top: 10px; }
+  .personal .fechas div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linea); }
+  .personal .fechas span:last-child { text-align: right; color: #3B3835; }
+  .seccion-t { font: 500 20px/1.2 var(--serif); margin-top: 32px; color: #3B3835; }
+  .item { padding: 18px 0; border-bottom: 1px solid var(--linea); }
+  .item:first-of-type { border-top: 1px solid var(--linea); }
+  .item h3 { font: 500 22px/1.2 var(--serif); }
+  .item p { font-size: 15px; color: #57524D; margin-top: 3px; }
+  .fecha-cita { font-size: 15px; color: var(--tinta); font-weight: 500; }
+  .item button.enlace { margin-top: 6px; }
+  details.pasadas { margin-top: 28px; }
+  details.pasadas summary { cursor: pointer; color: var(--taupe-osc); font-size: 15px; }
+
+  /* Receta */
+  .med { padding: 18px 0; border-bottom: 1px solid var(--linea); }
+  .med:first-of-type { border-top: 1px solid var(--linea); margin-top: 20px; }
+  .med h3 { font: 500 22px/1.2 var(--serif); }
+  .med p { font-size: 15px; color: #57524D; margin-top: 3px; }
+  .etiqueta { display: inline-block; margin-top: 8px; font-size: 13px; padding: 3px 10px; border-radius: 12px; background: var(--papel); border: 1px solid var(--linea); color: #57524D; }
+  .etiqueta.si { background: var(--tinta); color: var(--crema); border-color: var(--tinta); }
+  .caja { margin-top: 26px; padding: 20px; background: var(--papel); border: 1px solid var(--linea); }
+  .caja h3 { font: 500 22px/1.2 var(--serif); }
+  .caja p { font-size: 15px; color: #57524D; margin-top: 6px; }
+  .caja input[type=datetime-local] { width: 100%; margin-top: 14px; padding: 12px; border: 1px solid var(--linea); background: #fff; font-size: 17px; border-radius: 2px; }
+  .toma { display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; padding: 16px 0; border-bottom: 1px solid var(--linea); align-items: baseline; }
+  .toma .h { font: 500 24px/1 var(--serif); }
+  .toma .n { font-weight: 500; }
+  .toma .acc { grid-column: 2; display: flex; gap: 10px; margin-top: 10px; }
+  .toma .acc button { flex: 1; padding: 11px; border: 1px solid var(--tinta); background: transparent; border-radius: 2px; cursor: pointer; font-size: 15px; }
+  .toma .acc button.si { background: var(--tinta); color: var(--crema); }
+  .toma .ok { grid-column: 2; font-size: 14px; color: #57524D; }
+  .toma.critico .n::after { content: ' · importante'; color: var(--error); font-weight: 400; font-size: 14px; }
+  .dia-tomas { margin-top: 18px; font-size: 13px; color: var(--taupe-osc); letter-spacing: .02em; }
+  .aviso-cambio { margin-top: 20px; padding: 14px 16px; border-left: 3px solid var(--error); background: var(--papel); font-size: 15px; }
+  .alarma { margin-top: 32px; font-size: 15px; color: #3B3835; }
+  .alarma a { color: var(--tinta); font-weight: 500; }
+  .cargando-datos { margin-top: 24px; color: #6E6964; font-size: 15px; }
+
+  /* Firma del presupuesto */
+  .sello { display: inline-block; margin-top: 10px; font-size: 13px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--tinta); }
+  .firmar-resumen { margin-top: 18px; padding: 18px 0; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
+  .termino { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid var(--linea); cursor: pointer; font-size: 15px; line-height: 1.5; }
+  .termino input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--tinta); flex: none; }
+  .termino strong { display: block; font-weight: 500; font-size: 16px; margin-bottom: 2px; }
+  .termino span span { color: #57524D; }
+  .lienzo { position: relative; margin-top: 14px; border: 1px dashed var(--taupe); background: #fff; touch-action: none; }
+  .lienzo canvas { display: block; width: 100%; height: 190px; }
+  .lienzo .linea-base { position: absolute; left: 18px; right: 18px; bottom: 42px; border-bottom: 1px solid var(--linea); pointer-events: none; }
+  .lienzo .guia-firma { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; font-size: 13px; color: #8A847E; pointer-events: none; }
+  .lienzo .enlace { position: absolute; top: 4px; right: 12px; font-size: 14px; }
+  .huella { margin-top: 18px; font: 12px/1.5 ui-monospace, Menlo, monospace; color: #57524D; word-break: break-all; padding: 10px 12px; background: var(--papel); border: 1px solid var(--linea); }
+</style>
+</head>
+<body>
+<main class="marco" id="app">
+
+  <!-- Cargando -->
+  <section class="pantalla cargando" data-p="cargando"><img class="mono" src="logo-ms.png" alt="Cargando"></section>
+
+  <!-- 1. Celular -->
+  <section class="pantalla" data-p="celular" hidden>
+    <div class="firma"><img class="logo-h" src="logo-horizontal.png" alt="Dr. Miguel Soto · Cirujano plástico certificado"></div>
+    <div class="portada">
+      <h1>Su espacio de <em>paciente</em></h1>
+      <p class="bajada">Su cotización, sus indicaciones, su receta y sus citas con el Dr. Miguel Soto, en un solo lugar.</p>
+      <form id="f-celular" novalidate>
+        <label for="tel">Su celular</label>
+        <div class="campo"><span class="prefijo" aria-hidden="true">+52</span>
+          <input id="tel" name="tel" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="55 1234 5678" maxlength="14" required>
+        </div>
+        <p class="error" role="alert" id="e-celular"></p>
+        <button class="boton" type="submit" id="b-celular">Recibir código por WhatsApp</button>
+      </form>
+      <p class="nota">Use el número que registró en su consulta. ¿Aún no es paciente? <a class="enlace" id="l-nuevo" target="_blank" rel="noopener">Escríbanos por WhatsApp</a></p>
+    </div>
+  </section>
+
+  <!-- 2. Código -->
+  <section class="pantalla" data-p="codigo" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"></div>
+    <div class="portada">
+      <h2>Escriba el código que le enviamos</h2>
+      <p class="bajada" id="t-codigo"></p>
+      <form id="f-codigo" novalidate>
+        <label for="cod">Código de 6 dígitos</label>
+        <div class="campo codigo"><input id="cod" name="cod" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></div>
+        <p class="error" role="alert" id="e-codigo"></p>
+        <button class="boton" type="submit" id="b-codigo">Entrar</button>
+      </form>
+      <div class="acciones-sec">
+        <button class="enlace" type="button" id="b-cambiar">Cambiar número</button>
+        <button class="enlace" type="button" id="b-reenviar" disabled></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Consentimiento -->
+  <section class="pantalla" data-p="aviso" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"></div>
+    <div style="padding-top:36px">
+      <h2>Antes de entrar</h2>
+      <p class="bajada">Esta app muestra información de su salud. Lea cómo la cuidamos.</p>
+      <div class="aviso" id="t-aviso" tabindex="0" aria-label="Aviso de privacidad"></div>
+      <form id="f-aviso">
+        <label class="casilla"><input type="checkbox" id="c-priv" required>
+          <span>He leído el aviso de privacidad y autorizo el uso de mis datos personales, incluidos los de salud, para los fines descritos.</span></label>
+        <label class="casilla"><input type="checkbox" id="c-com">
+          <span>Quiero recibir promociones y novedades.<small>Opcional. Puede cambiarlo cuando quiera en Ajustes.</small></span></label>
+        <p class="error" role="alert" id="e-aviso"></p>
+        <button class="boton" type="submit" id="b-aviso" disabled>Aceptar y continuar</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 4. Inicio -->
+  <section class="pantalla" data-p="inicio" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="ajustes">Ajustes</button></div>
+    <div class="saludo">
+      <h1 id="t-saludo">Hola.</h1>
+      <p class="bajada">Aquí encontrará todo lo de su atención con nosotros, conforme avance su proceso.</p>
+    </div>
+    <div class="instalar" id="instalar" hidden></div>
+    <ul class="lista" id="lista"></ul>
+    <div class="ayuda">
+      <h2>¿Tiene una duda?</h2>
+      <p>Escríbanos y le respondemos. Si presenta un signo de alarma después de su cirugía, llámenos de inmediato al <span id="t-urg"></span>.</p>
+      <a class="boton" id="l-wa" target="_blank" rel="noopener">Escribir por WhatsApp</a>
+      <a class="boton claro" id="l-tel">Llamar al consultorio</a>
+    </div>
+  </section>
+
+  <!-- 6. Mi cotización -->
+  <section class="pantalla detalle" data-p="cotizacion" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="inicio">Volver</button></div>
+    <h2 class="titulo-detalle">Mis cotizaciones</h2>
+    <div id="v-cotizacion"></div>
+  </section>
+
+  <!-- 6b. Firmar un presupuesto -->
+  <section class="pantalla detalle" data-p="firmar" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="cotizacion">Volver</button></div>
+    <div id="v-firmar"></div>
+  </section>
+
+  <!-- 7. Mis citas -->
+  <section class="pantalla detalle" data-p="citas" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="inicio">Volver</button></div>
+    <h2 class="titulo-detalle">Mis citas</h2>
+    <div id="v-citas"></div>
+  </section>
+
+  <!-- 8. Mis indicaciones -->
+  <section class="pantalla detalle" data-p="indicaciones" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="inicio">Volver</button></div>
+    <h2 class="titulo-detalle">Mis indicaciones</h2>
+    <div id="v-indicaciones"></div>
+  </section>
+
+  <!-- 8b. Una hoja de indicaciones -->
+  <section class="pantalla detalle" data-p="hoja" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="indicaciones">Volver</button></div>
+    <div id="v-hoja"></div>
+  </section>
+
+  <!-- 9. Mi receta -->
+  <section class="pantalla detalle" data-p="receta" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="inicio">Volver</button></div>
+    <h2 class="titulo-detalle">Mi receta</h2>
+    <div id="v-receta"></div>
+    <p class="alarma">Si presenta un signo de alarma, llámenos de inmediato al <a id="l-tel-2"></a>. Estamos disponibles a cualquier hora.</p>
+  </section>
+
+  <!-- 5. Ajustes -->
+  <section class="pantalla ajustes" data-p="ajustes" hidden>
+    <div class="firma"><img class="mono" src="logo-ms.png" alt="" aria-hidden="true"><button class="enlace" type="button" data-ir="inicio">Volver</button></div>
+    <h2 style="padding:36px 0 12px">Ajustes</h2>
+    <div class="fila">
+      <div><strong style="font-weight:500">Promociones y novedades</strong><p>Los avisos de su tratamiento llegan siempre, aunque desactive esto.</p></div>
+      <label class="interruptor"><input type="checkbox" id="s-com" aria-label="Recibir promociones y novedades"><span></span></label>
+    </div>
+    <div class="fila">
+      <div><strong style="font-weight:500">Aviso de privacidad</strong><p>Versión que usted aceptó.</p></div>
+      <button class="enlace" type="button" id="b-ver-aviso">Leer</button>
+    </div>
+    <div class="aviso" id="t-aviso-2" hidden tabindex="0"></div>
+    <div class="fila"><strong style="font-weight:500">Cerrar sesión en este teléfono</strong><button class="enlace" type="button" id="b-salir">Cerrar sesión</button></div>
+    <div class="fila"><div><strong style="font-weight:500" class="peligro">Eliminar mi cuenta de la app</strong><p>Su expediente clínico no se borra.</p></div><button class="enlace peligro" type="button" id="b-eliminar">Eliminar</button></div>
+    <div class="confirmar" id="confirmar" hidden>
+      <p>Se cerrará su sesión en todos sus dispositivos y dejará de recibir avisos y recordatorios. Podrá volver a entrar cuando quiera con su celular.</p>
+      <button class="boton" type="button" id="b-eliminar-si" style="background:var(--error)">Eliminar mi cuenta</button>
+      <button class="enlace" type="button" id="b-eliminar-no">Conservar mi cuenta</button>
+    </div>
+    <p class="version" id="t-version"></p>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const C = window.APP_CONFIG;
+  const $ = s => document.querySelector(s);
+  const GUARDA = 'ms_pac_sesion';
+  let telefono = '';
+  let yo = null;
+  let relojReenvio = null;
+
+  // ── Utilidades ──
+  const leerToken = () => { try { return localStorage.getItem(GUARDA); } catch { return null; } };
+  const guardarToken = t => { try { t ? localStorage.setItem(GUARDA, t) : localStorage.removeItem(GUARDA); } catch {} };
+  const solo10 = v => { const d = String(v).replace(/\D/g, ''); return d.length > 10 ? d.slice(-10) : d; };
+  const formato = d => d.replace(/^(\d{2})(\d{0,4})(\d{0,4}).*/, (_, a, b, c) => [a, b, c].filter(Boolean).join(' '));
+
+  async function api(ruta, cuerpo) {
+    const h = { 'Content-Type': 'application/json' };
+    const t = leerToken(); if (t) h.Authorization = 'Bearer ' + t;
+    let r;
+    try {
+      r = await fetch(C.API + ruta, { method: cuerpo === undefined ? 'GET' : 'POST', headers: h, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+    } catch { return { ok: false, error: 'No hay conexión. Revise su internet e intente de nuevo.' }; }
+    const d = await r.json().catch(() => ({ ok: false, error: 'Respuesta inesperada del servidor.' }));
+    if (r.status === 401) { guardarToken(null); mostrar('celular'); }
+    return d;
+  }
+
+  function mostrar(p) {
+    document.querySelectorAll('.pantalla').forEach(s => { s.hidden = s.dataset.p !== p; });
+    window.scrollTo(0, 0);
+    const foco = { celular: '#tel', codigo: '#cod' }[p];
+    if (foco) setTimeout(() => $(foco).focus(), 60);
+  }
+  const ocupado = (b, si, texto) => { b.disabled = si; if (texto) b.textContent = texto; };
+
+  // ── Enlaces fijos ──
+  const wa = 'https://wa.me/' + C.WHATSAPP;
+  $('#l-nuevo').href = wa + '?text=' + encodeURIComponent('Hola, me gustaría información.');
+  $('#l-wa').href = wa;
+  $('#l-tel').href = 'tel:' + C.URGENCIAS;
+  $('#t-urg').textContent = C.URGENCIAS_TEXTO;
+  $('#l-tel-2').href = 'tel:' + C.URGENCIAS; $('#l-tel-2').textContent = C.URGENCIAS_TEXTO;
+  $('#t-aviso').innerHTML = C.AVISO_HTML;
+  $('#t-aviso-2').innerHTML = C.AVISO_HTML;
+  $('#t-version').textContent = 'Aviso de privacidad, versión ' + C.AVISO_VERSION;
+  document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { mostrar(b.dataset.ir); try { history.replaceState(null, '', location.pathname); } catch {} }));
+
+  // ── 1. Celular ──
+  $('#tel').addEventListener('input', e => { e.target.value = formato(solo10(e.target.value)); $('#e-celular').textContent = ''; });
+  $('#f-celular').addEventListener('submit', async e => {
+    e.preventDefault();
+    const t = solo10($('#tel').value);
+    if (t.length !== 10) { $('#e-celular').textContent = 'Escriba su celular a 10 dígitos.'; return; }
+    const b = $('#b-celular'); ocupado(b, true, 'Enviando código…');
+    const d = await api('/api/codigo', { telefono: t });
+    ocupado(b, false, 'Recibir código por WhatsApp');
+    if (!d.ok) { $('#e-celular').textContent = d.error; return; }
+    telefono = t;
+    $('#t-codigo').textContent = `Si +52 ${formato(t)} está registrado con nosotros, le llegará un mensaje de WhatsApp con su código. Vence en 10 minutos.`;
+    $('#cod').value = ''; $('#e-codigo').textContent = '';
+    iniciarReenvio();
+    mostrar('codigo');
+  });
+
+  // ── 2. Código ──
+  function iniciarReenvio() {
+    let s = 45; const b = $('#b-reenviar'); b.disabled = true;
+    clearInterval(relojReenvio);
+    const pinta = () => { b.textContent = s > 0 ? `Reenviar en ${s} s` : 'Reenviar código'; b.disabled = s > 0; };
+    pinta(); relojReenvio = setInterval(() => { s--; pinta(); if (s <= 0) clearInterval(relojReenvio); }, 1000);
+  }
+  $('#b-reenviar').addEventListener('click', async () => {
+    const d = await api('/api/codigo', { telefono });
+    $('#e-codigo').textContent = d.ok ? '' : d.error;
+    if (d.ok) iniciarReenvio();
+  });
+  $('#b-cambiar').addEventListener('click', () => { clearInterval(relojReenvio); mostrar('celular'); });
+  $('#cod').addEventListener('input', e => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    $('#e-codigo').textContent = '';
+    if (e.target.value.length === 6) $('#f-codigo').requestSubmit();
+  });
+  $('#f-codigo').addEventListener('submit', async e => {
+    e.preventDefault();
+    const codigo = $('#cod').value;
+    if (codigo.length !== 6) { $('#e-codigo').textContent = 'El código tiene 6 dígitos.'; return; }
+    const b = $('#b-codigo'); ocupado(b, true, 'Verificando…');
+    const d = await api('/api/verificar', { telefono, codigo, dispositivo: navigator.userAgent });
+    ocupado(b, false, 'Entrar');
+    if (!d.ok) { $('#e-codigo').textContent = d.error; $('#cod').select(); return; }
+    guardarToken(d.token);
+    clearInterval(relojReenvio);
+    await arrancar();
+  });
+
+  // ── 3. Aviso ──
+  $('#c-priv').addEventListener('change', e => { $('#b-aviso').disabled = !e.target.checked; });
+  $('#f-aviso').addEventListener('submit', async e => {
+    e.preventDefault();
+    const b = $('#b-aviso'); ocupado(b, true, 'Guardando…');
+    const d = await api('/api/consentimiento', { privacidad: true, version: C.AVISO_VERSION, comercial: $('#c-com').checked });
+    ocupado(b, false, 'Aceptar y continuar');
+    if (!d.ok) { $('#e-aviso').textContent = d.error; return; }
+    await arrancar();
+  });
+
+  // ── 4. Inicio ──
+  let datos = null;           // respuesta de /api/inicio
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pesos = n => '$' + Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+  const TZ = { timeZone: 'America/Mexico_City' };
+  const fechaLarga = iso => new Date(iso).toLocaleDateString('es-MX', { ...TZ, weekday: 'long', day: 'numeric', month: 'long' });
+  const fechaCorta = iso => new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('es-MX', { ...TZ, day: 'numeric', month: 'long', year: 'numeric' });
+  const hora = iso => new Date(iso).toLocaleTimeString('es-MX', { ...TZ, hour: 'numeric', minute: '2-digit' });
+
+  // Lista de cotizaciones vigentes (si el servidor aún no manda la lista, se usa la principal).
+  const cotizacionesDe = d => (d && d.cotizaciones && d.cotizaciones.length) ? d.cotizaciones : (d && d.cotizacion ? [d.cotizacion] : []);
+
+  const SECCIONES = [
+    ['cotizacion', 'Mis cotizaciones', 'Las cotizaciones que recibió en su valoración, con lo que lleva pagado.'],
+    ['indicaciones', 'Mis indicaciones', 'Lo que debe hacer antes y después de su cirugía, en cuanto quede programada.'],
+    ['receta', 'Mi receta', 'Sus medicamentos, con un recordatorio para cada toma.'],
+    ['citas', 'Mis citas', 'Sus próximas citas y las que ya tuvo.'],
+  ];
+  function resumenSeccion(clave) {
+    if (!datos) return { activa: false, estado: 'Cargando…' };
+    if (!datos.disponible) return { activa: false, estado: 'Aún no disponible' };
+    if (clave === 'cotizacion') {
+      const cs = cotizacionesDe(datos);
+      if (!cs.length) return { activa: false, estado: 'Sin cotización vigente' };
+      if (cs.length > 1 && !cs[0].decidida) return { activa: true, estado: cs.length + ' cotizaciones' };
+      return { activa: true, estado: cs[0].pagado > 0 && cs[0].saldo > 0 ? 'Saldo ' + pesos(cs[0].saldo) : 'Ver' };
+    }
+    if (clave === 'indicaciones') return datos.indicaciones.length
+      ? { activa: true, estado: datos.indicaciones.length === 1 ? '1 documento' : datos.indicaciones.length + ' documentos' }
+      : { activa: false, estado: 'Aún no hay' };
+    if (clave === 'receta') {
+      if (!datos.receta) return { activa: false, estado: 'Aún no hay' };
+      const pend = (datos.recordatorios.tomas || []).filter(t => t.estado === 'pendiente' && new Date(t.programada) <= new Date(Date.now() + 15 * 60e3)).length;
+      return { activa: true, estado: pend ? pend + (pend === 1 ? ' toma por confirmar' : ' tomas por confirmar') : (datos.recordatorios.activos.length ? 'Recordatorios activos' : 'Ver') };
+    }
+    if (clave === 'citas') {
+      const p = datos.citas.proximas[0];
+      return (p || datos.citas.pasadas.length)
+        ? { activa: true, estado: p ? new Date(p.inicio).toLocaleDateString('es-MX', { ...TZ, day: 'numeric', month: 'short' }) : 'Ver' }
+        : { activa: false, estado: 'Sin citas' };
+    }
+  }
+  function pintarInicio() {
+    $('#t-saludo').textContent = yo.nombre ? `Hola, ${yo.nombre}.` : 'Hola.';
+    const ul = $('#lista'); ul.innerHTML = '';
+    for (const [clave, titulo, texto] of SECCIONES) {
+      const r = resumenSeccion(clave);
+      const li = document.createElement('li');
+      li.className = r.activa ? 'activo' : 'inactivo';
+      li.innerHTML = `<h3></h3><span class="estado"></span><p></p>`;
+      li.querySelector('h3').textContent = titulo;
+      li.querySelector('p').textContent = texto;
+      li.querySelector('.estado').textContent = r.estado;
+      if (r.activa) {
+        li.tabIndex = 0; li.setAttribute('role', 'button');
+        const ir = () => abrir(clave);
+        li.addEventListener('click', ir);
+        li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ir(); } });
+      }
+      ul.appendChild(li);
+    }
+    $('#s-com').checked = !!yo.comercial;
+    pintarInstalar();
+  }
+
+  async function cargarDatos(fresco) {
+    const d = await api('/api/inicio' + (fresco ? '?fresco=1' : ''));
+    datos = d.ok ? d : { disponible: false, error: d.error };
+    if (d.ok && d.nombre && yo && !yo.nombre) yo.nombre = d.nombre;
+    pintarInicio();
+    const visible = [...document.querySelectorAll('.pantalla')].find(s => !s.hidden);
+    if (visible && PINTORES[visible.dataset.p]) PINTORES[visible.dataset.p]();
+  }
+
+  function abrir(clave) {
+    if (PINTORES[clave]) PINTORES[clave]();
+    mostrar(clave);
+    try { history.replaceState(null, '', '#' + clave); } catch {}
+  }
+
+  async function abrirDocumento(id, boton) {
+    const texto = boton.textContent; ocupado(boton, true, 'Abriendo…');
+    const ventana = window.open('', '_blank');           // se abre antes del await para que el navegador no la bloquee
+    const d = await api('/api/archivo/' + encodeURIComponent(id) + '/enlace');
+    ocupado(boton, false, texto);
+    if (!d.ok) { if (ventana) ventana.close(); alertaSuave(boton, d.error); return; }
+    if (ventana) ventana.location = C.API + d.url; else location.href = C.API + d.url;
+  }
+  async function abrirHoja(id, boton) {
+    const texto = boton.textContent; ocupado(boton, true, 'Abriendo…');
+    const d = await api('/api/hoja/' + encodeURIComponent(id));
+    ocupado(boton, false, texto);
+    if (!d.ok) { alertaSuave(boton, d.error); return; }
+    const al = b => b.alarma ? ' class="alarma"' : '';
+    const lista = b => `<ul${al(b)}>` + (b.x || []).map(li => `<li>${esc(li)}</li>`).join('') + '</ul>';
+    const bloque = b => {
+      if (b.t === 'h') return `<h3${al(b)}>${esc(b.x)}</h3>`;
+      if (b.t === 'h2') return `<h4${al(b)}>${esc(b.x)}</h4>`;
+      if (b.t === 'p') return `<p>${esc(b.x)}</p>`;
+      if (b.t === 'nota') return `<p class="nota">${esc(b.x)}</p>`;
+      if (b.t === 'ul') return lista(b);
+      if (b.t === 'tabla') return `<table><thead><tr>${(b.cols || []).map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>`
+        + (b.x || []).map(r => `<tr>${(r || []).map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+      if (b.t === 'citas') return `<table><thead><tr><th>Cita</th><th>Qué se hace</th></tr></thead><tbody>`
+        + (b.x || []).map(r => `<tr><td>${esc(r.cita)}</td><td>${esc(r.que)}</td></tr>`).join('') + '</tbody></table>';
+      return '';
+    };
+    const pe = d.personal || {};
+    const cuando = f => fechaLarga(f.inicio) + ', ' + hora(f.inicio)
+      + (f.ingreso ? ' · llegada ' + f.ingreso : '') + (f.sede ? ' · ' + f.sede : '');
+    const personal = (pe.paciente || pe.procedimiento || (pe.fechas || []).length) ? `<div class="personal">
+        ${pe.paciente ? `<p>Paciente: <strong>${esc(pe.paciente)}</strong></p>` : ''}
+        ${pe.procedimiento ? `<p>Procedimiento: ${esc(pe.procedimiento)}</p>` : ''}
+        ${(pe.fechas || []).length ? '<div class="fechas">' + pe.fechas.map(f => `<div><span>${esc(f.que)}</span><span>${esc(cuando(f))}</span></div>`).join('') + '</div>' : ''}
+      </div>` : '';
+    $('#v-hoja').innerHTML = `<h2 class="titulo-detalle">${esc(d.titulo)}</h2>${personal}
+      <div class="hoja">${d.entrada ? `<p class="entrada">${esc(d.entrada)}</p>` : ''}${(d.bloques || []).map(bloque).join('')}
+      <p class="meta" style="margin-top:26px">Si tiene dudas o presenta un signo de alarma, llámenos al ${esc(C.URGENCIAS_TEXTO)}.</p></div>`;
+    mostrar('hoja'); window.scrollTo(0, 0);
+  }
+  function alertaSuave(cerca, msg) {
+    let p = cerca.parentElement.querySelector('.error');
+    if (!p) { p = document.createElement('p'); p.className = 'error'; cerca.parentElement.appendChild(p); }
+    p.textContent = msg;
+  }
+
+  // ── 6b. Firma del presupuesto ──
+  let firmaInfo = null, firmaCargando = false;
+  async function cargarFirma() {
+    firmaCargando = true;
+    const d = await api('/api/firma');
+    firmaCargando = false;
+    if (d.ok) { firmaInfo = d; if (!$('[data-p="cotizacion"]').hidden) PINTORES.cotizacion(); }
+  }
+  function firmaHTML(c) {
+    if (!firmaInfo) return '';
+    const e = firmaInfo.estados[c.id] || {};
+    if (e.firmada) return `<p class="sello">✓ Aceptada y firmada el ${esc(fechaCorta(e.fechaFirma))}</p>
+      <button class="enlace" type="button" data-firmado="${esc(c.id)}" style="display:block">Ver documento firmado</button>`;
+    return `<button class="boton" type="button" data-firmar="${esc(c.id)}">Aceptar y firmar</button>`;
+  }
+  function abrirPdf(b64, nombre, ventana) {
+    const bin = atob(b64), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' }));
+    if (ventana) { ventana.location = url; return; }
+    const a = document.createElement('a'); a.href = url; a.download = nombre || 'Presupuesto firmado.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  async function abrirFirmado(id, boton) {
+    const texto = boton.textContent; ocupado(boton, true, 'Abriendo…');
+    const ventana = window.open('', '_blank');
+    const d = await api('/api/firma/' + encodeURIComponent(id) + '/pdf');
+    ocupado(boton, false, texto);
+    if (!d.ok) { if (ventana) ventana.close(); alertaSuave(boton, d.error); return; }
+    abrirPdf(d.pdfBase64, d.pdfNombre, ventana);
+  }
+
+  let trazos = 0;
+  function abrirFirma(id) {
+    const c = cotizacionesDe(datos).find(x => x.id === id);
+    if (!c || !firmaInfo) return;
+    trazos = 0;
+    $('#v-firmar').innerHTML = `
+      <h2 class="titulo-detalle">Aceptar su presupuesto</h2>
+      <p class="bajada">Lea los términos de apartado y anticipo. Al final le pedimos su firma.</p>
+      <div class="firmar-resumen">
+        <p class="proc" style="margin-top:0">${esc(c.procedimiento)}</p>
+        <p class="meta">Cotización ${esc(c.id)} · ${esc(fechaCorta(c.fecha))}</p>
+        <dl class="renglones" style="margin-top:14px">
+          <div><dt>Total del presupuesto</dt><dd>${pesos(c.monto)}</dd></div>
+          <div><dt>Anticipo para apartar su fecha</dt><dd>${pesos(firmaInfo.anticipo)}</dd></div>
+        </dl>
+        ${c.pdf ? `<button class="enlace" type="button" id="f-ver-cot">Ver cotización completa</button>` : ''}
+      </div>
+      <p class="seccion-t">Términos</p>
+      <div id="f-terminos">${firmaInfo.terminos.map((t, i) => `
+        <label class="termino"><input type="checkbox" data-k="${esc(t.k)}">
+          <span><strong>${i + 1}. ${esc(t.t)}</strong><span>${esc(t.p)}</span></span></label>`).join('')}
+      </div>
+      <p class="seccion-t">Su firma</p>
+      <p class="meta">Firme con su dedo dentro del recuadro.</p>
+      <div class="lienzo"><canvas id="f-pad"></canvas><div class="linea-base"></div><div class="guia-firma" id="f-guia">Firme aquí</div>
+        <button class="enlace" type="button" id="f-borrar">Borrar</button></div>
+      <p class="error" role="alert" id="e-firma"></p>
+      <button class="boton" type="button" id="b-firmar" disabled>Firmar y aceptar presupuesto</button>
+      <p class="meta" style="margin-top:14px">Su firma queda registrada con la fecha y la hora, y con la verificación de su sesión por WhatsApp.</p>`;
+    if (c.pdf) $('#f-ver-cot').onclick = e => abrirDocumento('cot:' + c.id, e.target);
+    const valida = () => {
+      const todos = [...document.querySelectorAll('#f-terminos input')].every(x => x.checked);
+      $('#b-firmar').disabled = !(todos && trazos > 0);
+    };
+    document.querySelectorAll('#f-terminos input').forEach(x => x.onchange = valida);
+    mostrar('firmar');
+
+    // Lienzo de firma
+    const pad = $('#f-pad'), ctx = pad.getContext('2d');
+    let dibujando = false, ult = null;
+    const ajustar = () => {
+      const r = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      pad.width = Math.round(r.width * dpr); pad.height = Math.round(r.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#030707';
+      trazos = 0; $('#f-guia').hidden = false; valida();
+    };
+    setTimeout(ajustar, 40);
+    const pos = e => { const r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, t: Date.now() }; };
+    pad.onpointerdown = e => { e.preventDefault(); pad.setPointerCapture(e.pointerId); dibujando = true; ult = pos(e); $('#f-guia').hidden = true; };
+    pad.onpointermove = e => {
+      if (!dibujando) return; e.preventDefault();
+      const p = pos(e), v = Math.hypot(p.x - ult.x, p.y - ult.y) / Math.max(p.t - ult.t, 1);
+      ctx.lineWidth = Math.max(1.2, Math.min(3.2, 3.4 - v * 1.4));
+      ctx.beginPath(); ctx.moveTo(ult.x, ult.y); ctx.lineTo(p.x, p.y); ctx.stroke(); ult = p;
+    };
+    pad.onpointerup = pad.onpointercancel = pad.onpointerleave = () => { if (dibujando) { dibujando = false; trazos++; valida(); } };
+    $('#f-borrar').onclick = ajustar;
+
+    $('#b-firmar').onclick = async () => {
+      const b = $('#b-firmar'); ocupado(b, true, 'Firmando…'); $('#e-firma').textContent = '';
+      const w = 600, h = Math.round(w * pad.height / pad.width), cv = document.createElement('canvas');
+      cv.width = w; cv.height = h; const x = cv.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(pad, 0, 0, w, h);
+      const d = await api('/api/firma/' + encodeURIComponent(c.id), {
+        aceptaciones: [...document.querySelectorAll('#f-terminos input')].filter(i => i.checked).map(i => i.dataset.k),
+        firmaPng: cv.toDataURL('image/png'),
+        tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || ''), pantalla: screen.width + 'x' + screen.height,
+      });
+      if (!d.ok) { ocupado(b, false, 'Firmar y aceptar presupuesto'); $('#e-firma').textContent = d.error; return; }
+      firmaInfo.estados[c.id] = { firmada: true, fechaFirma: d.fechaFirma, folio: d.folio };
+      $('#v-firmar').innerHTML = `
+        <h2 class="titulo-detalle">Presupuesto aceptado</h2>
+        <p class="bajada">${d.yaFirmada ? 'Este presupuesto ya estaba firmado.' : 'Su firma quedó registrada el ' + esc(fechaCorta(d.fechaFirma)) + '.'}
+          Su asesora le confirmará la forma de pago de su anticipo para apartar su fecha.</p>
+        ${d.pdfBase64 ? '<button class="boton" type="button" id="f-pdf">Descargar documento firmado</button>' : ''}
+        <button class="boton claro" type="button" data-ir2="cotizacion">Volver a mis cotizaciones</button>
+        ${d.hash ? `<p class="huella">Huella del documento (SHA-256): ${esc(d.hash)}</p>` : ''}`;
+      if (d.pdfBase64) $('#f-pdf').onclick = () => abrirPdf(d.pdfBase64, d.pdfNombre);
+      $('[data-ir2]').onclick = () => abrir('cotizacion');
+      window.scrollTo(0, 0);
+    };
+  }
+
+  // ── 6-9. Detalle ──
+  const PINTORES = {
+    cotizacion() {
+      const cs = cotizacionesDe(datos), v = $('#v-cotizacion');
+      if (!cs.length) { v.innerHTML = '<p class="vacio">No encontramos una cotización vigente a su nombre. Si acaba de tener su valoración, puede tardar unos minutos en aparecer.</p>'; return; }
+      const tarjeta = (c, grande) => `
+        <div class="cot-tarjeta">
+          <p class="proc">${esc(c.procedimiento)}</p>
+          <p class="meta">Cotización ${esc(c.id)} · ${esc(fechaCorta(c.fecha))}</p>
+          <p class="${grande ? 'cifra-grande' : 'cifra'}">${pesos(c.monto)}</p>
+          ${c.pagado > 0 ? `<dl class="renglones">
+            <div><dt>Pagado</dt><dd>${pesos(c.pagado)}</dd></div>
+            <div><dt>Saldo</dt><dd>${pesos(c.saldo)}</dd></div>
+          </dl>` : ''}
+          ${c.pdf ? `<button class="boton claro" type="button" data-cot="${esc(c.id)}">Ver cotización completa</button>` : ''}
+          ${firmaHTML(c)}
+        </div>`;
+      const principal = cs[0].decidida || cs.length === 1;
+      v.innerHTML = principal
+        ? tarjeta(cs[0], true) + (cs.length > 1 ? '<p class="seccion-t">Otras cotizaciones</p>' + cs.slice(1).map(c => tarjeta(c, false)).join('') : '')
+        : `<p class="meta">Tiene ${cs.length} opciones para revisar con calma. Cuando decida, con gusto le ayudamos a apartar su fecha.</p>` + cs.map(c => tarjeta(c, false)).join('');
+      v.innerHTML += '<p class="meta" style="margin-top:18px">Si algún monto no coincide con lo que usted pagó, escríbanos por WhatsApp y lo revisamos.</p>';
+      v.querySelectorAll('[data-cot]').forEach(b => { b.onclick = () => abrirDocumento('cot:' + b.dataset.cot, b); });
+      v.querySelectorAll('[data-firmar]').forEach(b => { b.onclick = () => abrirFirma(b.dataset.firmar); });
+      v.querySelectorAll('[data-firmado]').forEach(b => { b.onclick = () => abrirFirmado(b.dataset.firmado, b); });
+      if (!firmaInfo && !firmaCargando) cargarFirma();
+    },
+
+    citas() {
+      const v = $('#v-citas'), c = datos && datos.citas;
+      if (!c || (!c.proximas.length && !c.pasadas.length)) { v.innerHTML = '<p class="vacio">No tiene citas registradas por ahora.</p>'; return; }
+      const fila = x => `<div class="item">
+          <p class="fecha-cita">${esc(fechaLarga(x.inicio))}, ${esc(hora(x.inicio))}</p>
+          <h3>${esc(x.tipo)}</h3>
+          ${x.detalle ? `<p>${esc(x.detalle)}</p>` : ''}
+          ${x.sede || x.modalidad ? `<p>${esc([x.sede, x.modalidad].filter(Boolean).join(' · '))}</p>` : ''}
+          ${x.ingreso ? `<p>Hora de llegada: ${esc(x.ingreso)}</p>` : ''}
+        </div>`;
+      v.innerHTML = (c.proximas.length ? '<p class="seccion-t">Próximas</p>' + c.proximas.map(fila).join('') : '<p class="vacio">No tiene citas próximas.</p>')
+        + (c.pasadas.length ? `<details class="pasadas"><summary>Citas anteriores (${c.pasadas.length})</summary>${c.pasadas.map(fila).join('')}</details>` : '')
+        + '<p class="meta" style="margin-top:22px">Para cambiar una cita, escríbanos por WhatsApp.</p>';
+    },
+
+    indicaciones() {
+      const v = $('#v-indicaciones'), l = (datos && datos.indicaciones) || [];
+      if (!l.length) { v.innerHTML = '<p class="vacio">Sus indicaciones aparecerán aquí en cuanto quede programada su cirugía.</p>'; return; }
+      const cx = datos.cirugia;
+      v.innerHTML = (cx ? `<p class="meta" style="margin-top:10px">${esc(cx.procedimiento)}${cx.momento === 'PRE' ? ' · cirugía el ' + esc(fechaLarga(cx.fecha)) : ''}</p>` : '')
+        + l.map(i => `<div class="item"><h3>${esc(i.titulo)}</h3>
+            <p>${i.momento === 'PRE' ? 'Antes de su cirugía' : i.momento === 'POST' ? 'Después de su cirugía' : 'Antes y después de su cirugía'}</p>
+            ${i.tipo === 'hoja'
+              ? `<button class="enlace" type="button" data-hoja="${esc(i.id)}">Leer indicaciones</button>`
+              : `<button class="enlace" type="button" data-doc="${esc(i.id)}">Abrir documento</button>`}</div>`).join('');
+      v.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => abrirDocumento(b.dataset.doc, b));
+      v.querySelectorAll('[data-hoja]').forEach(b => b.onclick = () => abrirHoja(b.dataset.hoja, b));
+    },
+
+    receta() {
+      const v = $('#v-receta'), r = datos && datos.receta, rec = (datos && datos.recordatorios) || { activos: [], tomas: [] };
+      if (!r) { v.innerHTML = '<p class="vacio">Su receta aparecerá aquí cuando su médico la registre en su expediente.</p>'; return; }
+      const conAlarma = r.renglones.filter(x => x.alarma);
+      let html = `<p class="meta" style="margin-top:8px">Receta del ${esc(fechaCorta(r.fecha))}</p>`;
+      if (rec.recetaNueva) html += '<div class="aviso-cambio">Su médico registró una receta nueva. Vuelva a programar sus recordatorios para que coincidan con ella.</div>';
+
+      const horasTxt = h => h.map(x => x === '24:00' ? '00:00' : x).join(', ').replace(/, ([^,]*)$/, ' y $1');
+      html += r.renglones.map(x => `<div class="med"><h3>${esc(x.medicamento)}</h3><p>${esc(x.indicacion)}</p>
+        ${x.horas_fijas ? `<p class="meta">Horario: ${esc(horasTxt(x.horas_fijas))}</p>` : ''}
+        <span class="etiqueta ${x.alarma ? 'si' : ''}">${x.alarma ? 'Con recordatorio' : x.a_demanda ? 'Solo si lo necesita' : 'Según indicación de su médico'}</span></div>`).join('');
+
+      const activos = rec.activos.length && !rec.recetaNueva;
+      if (activos) {
+        const ahora = Date.now();
+        const lista = rec.tomas.filter(t => new Date(t.programada).getTime() > ahora - 18 * 3600e3);
+        const diaDe = iso => new Date(iso).toLocaleDateString('en-CA', TZ);
+        const hoyD = diaDe(new Date().toISOString()), mananaD = diaDe(new Date(Date.now() + 864e5).toISOString()), ayerD = diaDe(new Date(Date.now() - 864e5).toISOString());
+        const nombreDia = d => d === hoyD ? 'Hoy' : d === mananaD ? 'Mañana' : d === ayerD ? 'Ayer' : fechaLarga(d + 'T12:00:00');
+        let diaPrevio = '';
+        html += '<p class="seccion-t">Sus tomas</p>' + (lista.length ? lista.map(t => {
+          const d = diaDe(t.programada);
+          const cab = d !== diaPrevio ? `<p class="dia-tomas">${esc(nombreDia(d))}</p>` : '';
+          diaPrevio = d;
+          return cab + filaToma(t);
+        }).join('') : '<p class="vacio">No tiene tomas en las próximas horas.</p>');
+        function filaToma(t) {
+          const pasada = new Date(t.programada).getTime() <= ahora + 15 * 60e3;
+          const acc = t.estado === 'tomada' ? '<span class="ok">Tomada ✓</span>'
+            : t.estado === 'omitida' ? '<span class="ok">La omitió</span>'
+            : pasada ? `<div class="acc"><button class="si" data-toma="${t.id}" data-e="tomada">Ya la tomé</button><button data-toma="${t.id}" data-e="omitida">La omití</button></div>`
+            : '';
+          return `<div class="toma ${t.critico ? 'critico' : ''}"><span class="h">${esc(hora(t.programada))}</span><span class="n">${esc(t.medicamento)}</span>${acc}</div>`;
+        }
+        html += `<div class="caja"><h3>Notificaciones</h3><p id="t-push">Le avisamos en este teléfono a la hora de cada toma.</p>
+          <button class="boton claro" type="button" id="b-push">Activar notificaciones</button>
+          <button class="enlace" type="button" id="b-detener" style="margin-top:12px">Dejar de recordarme</button></div>`;
+      } else if (conAlarma.length) {
+        const sig = new Date(Date.now() + 3600e3); sig.setMinutes(0, 0, 0);
+        const local = new Date(sig.getTime() - sig.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+        html += `<div class="caja"><h3>Recordatorios de sus tomas</h3>
+          <p>${conAlarma.some(x => x.horas_fijas)
+            ? 'Su médico ya le asignó un horario a cada medicamento. Díganos desde cuándo empieza el tratamiento y le avisamos en cada toma.'
+            : 'Díganos a qué hora tomará (o tomó) la primera dosis. Calculamos las demás según su receta y le avisamos en cada una.'}</p>
+          <input type="datetime-local" id="i-primera" value="${local}" aria-label="Hora de la primera toma">
+          <p class="error" id="e-rec"></p>
+          <button class="boton" type="button" id="b-programar">Programar recordatorios</button></div>`;
+      }
+      v.innerHTML = html;
+
+      v.querySelectorAll('[data-toma]').forEach(b => b.onclick = async () => {
+        b.disabled = true;
+        const d = await api('/api/tomas/' + b.dataset.toma, { estado: b.dataset.e });
+        if (d.ok) { datos.recordatorios = { ...datos.recordatorios, ...d.recordatorios }; PINTORES.receta(); pintarInicio(); }
+        else b.disabled = false;
+      });
+      const bp = $('#b-programar');
+      if (bp) bp.onclick = async () => {
+        const val = $('#i-primera').value;
+        if (!val) { $('#e-rec').textContent = 'Elija fecha y hora.'; return; }
+        ocupado(bp, true, 'Programando…');
+        const d = await api('/api/recordatorios', { primera: new Date(val).toISOString() });
+        ocupado(bp, false, 'Programar recordatorios');
+        if (!d.ok) { $('#e-rec').textContent = d.error; return; }
+        datos.recordatorios = { ...d.recordatorios, recetaNueva: false };
+        PINTORES.receta(); pintarInicio();
+        activarPush(true);
+      };
+      const bpush = $('#b-push'); if (bpush) { bpush.onclick = () => activarPush(false); pintarPush(); }
+      const bd = $('#b-detener'); if (bd) bd.onclick = async () => {
+        await api('/api/recordatorios/detener', {});
+        datos.recordatorios = { activos: [], tomas: [], receta_id: null, recetaNueva: false };
+        PINTORES.receta(); pintarInicio();
+      };
+    },
+  };
+
+  // ── Notificaciones push ──
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const instaladaApp = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  function b64aUint8(b64) {
+    const p = '='.repeat((4 - b64.length % 4) % 4), s = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(s, c => c.charCodeAt(0));
+  }
+  async function pintarPush() {
+    const t = $('#t-push'), b = $('#b-push'); if (!t || !b) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      if (esIOS && !instaladaApp()) { t.innerHTML = 'Para recibir avisos en iPhone, primero agregue la app a su pantalla de inicio y ábrala desde ahí:' + guiaIOS(); b.hidden = true; }
+      else { t.textContent = 'Este navegador no permite notificaciones. Revise sus tomas aquí en la app.'; b.hidden = true; }
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      const reg = await navigator.serviceWorker.ready; const s = await reg.pushManager.getSubscription();
+      if (s) { t.textContent = 'Notificaciones activas en este teléfono.'; b.textContent = 'Enviar aviso de prueba'; b.onclick = async () => { await api('/api/push/prueba', {}); }; return; }
+    }
+    if (Notification.permission === 'denied') { t.textContent = 'Las notificaciones están bloqueadas para esta app. Actívelas en los ajustes de su teléfono.'; b.hidden = true; }
+  }
+  async function activarPush(silencioso) {
+    if (!datos || !datos.push || !datos.push.disponible || !('PushManager' in window)) { pintarPush(); return; }
+    try {
+      const permiso = await Notification.requestPermission();
+      if (permiso !== 'granted') { pintarPush(); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) ||
+        await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aUint8(datos.push.clave) });
+      await api('/api/push/suscribir', { suscripcion: sub.toJSON() });
+      if (!silencioso) await api('/api/push/prueba', {});
+    } catch (e) { const t = $('#t-push'); if (t) t.textContent = 'No pudimos activar las notificaciones en este teléfono.'; }
+    pintarPush();
+  }
+  // Al volver a la app (por ejemplo desde una notificación), refrescar las tomas.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && yo && !yo.requiereConsentimiento) cargarDatos(false); });
+
+  // Sugerencia para instalar la app en la pantalla de inicio
+  let eventoInstalar = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); eventoInstalar = e; if (yo) pintarInstalar(); });
+  // iPhone no tiene botón de "Instalar": se hace desde el menú del navegador. Los pasos cambian según el navegador.
+  function guiaIOS() {
+    const ua = navigator.userAgent;
+    const dentroDeApp = /FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(ua);
+    const chrome = /CriOS/i.test(ua);
+    if (dentroDeApp) return '<ol class="pasos"><li>Esta página se abrió dentro de otra app. Toque el menú <span class="ico">•••</span> o <span class="ico">⬆︎</span> y elija <strong>Abrir en Safari</strong>.</li><li>Ya en Safari, vuelva a tocar <strong>Ver cómo</strong>.</li></ol>';
+    if (chrome) return '<ol class="pasos"><li>Toque <span class="ico">⬆︎</span> <strong>Compartir</strong>, arriba a la derecha junto a la dirección.</li><li>Elija <strong>Agregar a inicio</strong> (si no lo ve, toque <strong>Más</strong>).</li><li>Toque <strong>Agregar</strong>.</li></ol>';
+    return '<ol class="pasos"><li>Toque <span class="ico">•••</span> abajo a la derecha (en iPhone con versiones anteriores, toque directo <span class="ico">⬆︎</span> <strong>Compartir</strong> abajo al centro).</li><li>Toque <span class="ico">⬆︎</span> <strong>Compartir</strong>.</li><li>Deslice hacia abajo y elija <strong>Agregar a inicio</strong>.</li><li>Toque <strong>Agregar</strong>. Luego abra la app desde el ícono MS de su pantalla.</li></ol>';
+  }
+  function pintarInstalar() {
+    const caja = $('#instalar');
+    const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    let descartada = false; try { descartada = localStorage.getItem('ms_pac_instalar') === 'no'; } catch {}
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (instalada || descartada || (!ios && !eventoInstalar)) { caja.hidden = true; return; }
+    caja.innerHTML = ios
+      ? '<span>Agregue la app a su pantalla de inicio para abrirla con un toque y recibir sus recordatorios.</span>'
+      : '<span>Instale la app para abrirla desde su pantalla de inicio y recibir recordatorios.</span>';
+    if (ios) {
+      const g = document.createElement('div'); g.className = 'guia'; g.hidden = true; g.innerHTML = guiaIOS();
+      const b = document.createElement('button'); b.className = 'enlace'; b.type = 'button'; b.textContent = 'Ver cómo';
+      b.onclick = () => { g.hidden = !g.hidden; b.textContent = g.hidden ? 'Ver cómo' : 'Ocultar'; };
+      caja.appendChild(b); caja.appendChild(g);
+    }
+    if (!ios) {
+      const b = document.createElement('button'); b.className = 'enlace'; b.type = 'button'; b.textContent = 'Instalar';
+      b.onclick = async () => { eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; caja.hidden = true; };
+      caja.appendChild(b);
+    }
+    const x = document.createElement('button'); x.className = 'enlace'; x.type = 'button'; x.textContent = 'Ahora no';
+    x.onclick = () => { try { localStorage.setItem('ms_pac_instalar', 'no'); } catch {} caja.hidden = true; };
+    caja.appendChild(x);
+    caja.hidden = false;
+  }
+
+  // ── 5. Ajustes ──
+  $('#s-com').addEventListener('change', async e => {
+    const quiere = e.target.checked;
+    const d = await api('/api/preferencias', { comercial: quiere });
+    if (!d.ok) e.target.checked = !quiere; else yo.comercial = quiere;
+  });
+  $('#b-ver-aviso').addEventListener('click', () => { const a = $('#t-aviso-2'); a.hidden = !a.hidden; });
+  $('#b-salir').addEventListener('click', async () => { await api('/api/salir', {}); guardarToken(null); yo = null; mostrar('celular'); });
+  $('#b-eliminar').addEventListener('click', () => { $('#confirmar').hidden = false; $('#b-eliminar-si').focus(); });
+  $('#b-eliminar-no').addEventListener('click', () => { $('#confirmar').hidden = true; });
+  $('#b-eliminar-si').addEventListener('click', async () => {
+    const d = await api('/api/eliminar-cuenta', {});
+    if (d.ok) { guardarToken(null); yo = null; $('#confirmar').hidden = true; mostrar('celular'); }
+  });
+
+  // ── Arranque ──
+  async function arrancar() {
+    if (!leerToken()) return mostrar('celular');
+    const d = await api('/api/yo');
+    if (!d.ok) { if (leerToken()) { mostrar('celular'); $('#e-celular').textContent = d.error && d.error !== 'sesion' ? d.error : ''; } return; }
+    yo = d;
+    if (d.requiereConsentimiento) { $('#c-priv').checked = false; $('#b-aviso').disabled = true; return mostrar('aviso'); }
+    pintarInicio();
+    const destino = (location.hash || '').slice(1);
+    if (PINTORES[destino]) mostrar(destino); else mostrar('inicio');
+    await cargarDatos(false);
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  arrancar();
+})();
+</script>
+</body>
+</html>

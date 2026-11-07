@@ -17,6 +17,8 @@
 var FIRMA_BASE_URL = 'https://firma.miguelsotomd.com/?t=';
 var DIAS_VIGENCIA_LIGA = 30;
 var TERMS_VERSION = 'T-2026-11-v1';
+// Servidor de la app de pacientes: confirma cada firma hecha dentro de la app (boleto de un solo uso)
+var APP_API_BASE = 'https://app-pacientes-api-production.up.railway.app';
 var CREADORES_PERMITIDOS = /@(gmail\.com|miguelsotomd\.com|renaste\.com|zorvix\.mx)$/i;
 
 var COLS = ['Token','Folio','COT','PacienteId','Nombre','Telefono','Email','Total','Anticipo',
@@ -86,6 +88,7 @@ function doGet(e) {
   try {
     if (p.action === 'obtener') return json_(obtener_(p.t, 'web'));
     if (p.action === 'estado')  return json_(estado_(p.ids || ''));
+    if (p.action === 'terminos') return json_({ ok:true, termsVersion:TERMS_VERSION, terminos:terminos_(mxn_(Number(p.anticipo) || 10000)) });
     if (p.action === 'ping')    return json_({ ok:true, version:TERMS_VERSION });
     return json_({ ok:false, error:'Acción no reconocida' });
   } catch (err) {
@@ -100,6 +103,8 @@ function doPost(e) {
     if (body.action === 'crearSolicitud') return json_(crearSolicitud_(body));
     if (body.action === 'firmar')         return json_(firmar_(body));
     if (body.action === 'anular')         return json_(anular_(body));
+    if (body.action === 'firmarApp')      return json_(firmarApp_(body));
+    if (body.action === 'pdfApp')         return json_(pdfApp_(body));
     return json_({ ok:false, error:'Acción no reconocida' });
   } catch (err) {
     return json_({ ok:false, error: String(err && err.message || err) });
@@ -208,55 +213,145 @@ function firmar_(b) {
     if (!b.firmaPng || String(b.firmaPng).indexOf('data:image/png;base64,') !== 0) throw new Error('Falta su firma');
     if (String(b.firmaPng).length > 400000) throw new Error('La imagen de la firma es demasiado grande');
 
-    var ahora = new Date();
-    var folder = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_ID'));
-    var base = r[c.Folio] + ' · ' + r[c.COT] + ' · ' + r[c.Nombre];
-    var png = Utilities.newBlob(Utilities.base64Decode(String(b.firmaPng).split(',')[1]), 'image/png', base + ' · firma.png');
-    var pngFile = folder.createFile(png);
-
-    var evidencia = {
-      folio:r[c.Folio], cot:r[c.COT], pacienteId:r[c.PacienteId], nombreRegistrado:r[c.Nombre],
-      nombreEscrito:nombreEscrito, telefonoRegistrado:'••••••' + tel.slice(-4), tel4Verificado:true,
-      ligaEnviadaA:'WhatsApp ' + tel, fechaHoraServidor:ahora.toISOString(),
+    var evid = {
+      canal:'Liga personal enviada por WhatsApp a ' + tel.replace(/\d(?=\d{4})/g, '•'),
+      verificacion:'Nombre completo y últimos 4 dígitos del teléfono registrado',
+      nombreEscrito:nombreEscrito, tel4Verificado:true,
       zonaHoraria:String(b.tz || ''), ip:String(b.ip || ''), userAgent:String(b.ua || '').slice(0, 300),
-      pantalla:String(b.pantalla || ''), termsVersion:r[c.TermsVersion], aceptaciones:acepta,
-      snapshotHash:r[c.SnapshotHash], firmaPngSha256:sha256Bytes_(png.getBytes()),
-      aperturas:Number(r[c.Aperturas] || 0), primeraApertura:iso_(r[c.PrimeraApertura])
+      pantalla:String(b.pantalla || '')
     };
-    var canon = JSON.stringify({ presupuesto:snap, terminos:terminos_(mxn_(snap.anticipo)), evidencia:evidencia });
-    var hashDoc = sha256_(canon);
-
-    var html = pdfHtml_(snap, terminos_(mxn_(snap.anticipo)), evidencia, hashDoc, String(b.firmaPng), r[c.Folio]);
-    var pdf = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf').setName(base + ' · ACEPTADA Y FIRMADA.pdf');
-    var pdfFile = folder.createFile(pdf);
-    // Copia del JSON canónico: permite recalcular el hash en cualquier momento
-    folder.createFile(Utilities.newBlob(canon, 'application/json', base + ' · evidencia.json'));
-
-    var correo = '';
-    if (r[c.Email] && /@/.test(r[c.Email])) {
-      try {
-        MailApp.sendEmail({ to:r[c.Email], name:'Dr. Miguel Soto',
-          subject:'Su presupuesto firmado · ' + r[c.COT],
-          htmlBody:'<p>Estimada(o) ' + esc_(r[c.Nombre]) + ':</p><p>Le compartimos su presupuesto <b>' + r[c.COT] +
-            '</b> con los términos de anticipo que usted aceptó y firmó el ' + fechaMx_(ahora) + '.</p>' +
-            '<p>Para cualquier duda, comuníquese con nosotros al <b>55 6223 4133</b>.</p><p>Dr. Miguel Soto</p>',
-          attachments:[pdf] });
-        correo = r[c.Email];
-      } catch (mx) { correo = 'error: ' + mx.message; }
-    }
-
-    var upd = {};
-    upd[c.Estado] = 'firmada'; upd[c.FechaFirma] = ahora; upd[c.NombreEscrito] = nombreEscrito; upd[c.Tel4] = 'OK';
-    upd[c.IP] = evidencia.ip; upd[c.UserAgent] = evidencia.userAgent; upd[c.ZonaHoraria] = evidencia.zonaHoraria;
-    upd[c.Pantalla] = evidencia.pantalla; upd[c.FirmaPngId] = pngFile.getId(); upd[c.PdfId] = pdfFile.getId();
-    upd[c.HashDocumento] = hashDoc; upd[c.EvidenciaJSON] = JSON.stringify(evidencia); upd[c.CorreoEnviado] = correo;
-    Object.keys(upd).forEach(function (k) { sh.getRange(f.rowNum, Number(k) + 1).setValue(upd[k]); });
-    log_(b.t, 'firmada', hashDoc, evidencia.ip);
-
-    return { ok:true, folio:r[c.Folio], hash:hashDoc, fechaFirma:ahora.toISOString(),
-      correo: correo && correo.indexOf('error') !== 0 ? correo : '',
-      pdfBase64: Utilities.base64Encode(pdf.getBytes()), pdfNombre: pdf.getName() };
+    return sellar_(f, acepta, String(b.firmaPng), evid, b.t);
   } finally { lock.releaseLock(); }
+}
+
+// Sella una solicitud: guarda firma, arma evidencia, PDF con huella, correo y fila. (Se llama con el candado tomado.)
+function sellar_(f, acepta, firmaPng, evid, origenLog) {
+  var r = f.row, c = idx_(), sh = hoja_();
+  var snap = JSON.parse(r[c.SnapshotJSON]);
+  var tel = String(r[c.Telefono]);
+  var ahora = new Date();
+  var folder = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('FOLDER_ID'));
+  var base = r[c.Folio] + ' · ' + r[c.COT] + ' · ' + r[c.Nombre];
+  var png = Utilities.newBlob(Utilities.base64Decode(firmaPng.split(',')[1]), 'image/png', base + ' · firma.png');
+  var pngFile = folder.createFile(png);
+
+  var evidencia = {
+    folio:r[c.Folio], cot:r[c.COT], pacienteId:r[c.PacienteId], nombreRegistrado:r[c.Nombre],
+    nombreEscrito:evid.nombreEscrito || r[c.Nombre], telefonoRegistrado:'••••••' + tel.slice(-4),
+    canal:evid.canal, verificacion:evid.verificacion, fechaHoraServidor:ahora.toISOString(),
+    zonaHoraria:evid.zonaHoraria || '', ip:evid.ip || '', userAgent:evid.userAgent || '', pantalla:evid.pantalla || '',
+    termsVersion:r[c.TermsVersion], aceptaciones:acepta,
+    snapshotHash:r[c.SnapshotHash], firmaPngSha256:sha256Bytes_(png.getBytes()),
+    aperturas:Number(r[c.Aperturas] || 0), primeraApertura:iso_(r[c.PrimeraApertura])
+  };
+  if (evid.sesion) evidencia.sesion = evid.sesion;
+  var canon = JSON.stringify({ presupuesto:snap, terminos:terminos_(mxn_(snap.anticipo)), evidencia:evidencia });
+  var hashDoc = sha256_(canon);
+
+  var html = pdfHtml_(snap, terminos_(mxn_(snap.anticipo)), evidencia, hashDoc, firmaPng, r[c.Folio]);
+  var pdf = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf').setName(base + ' · ACEPTADA Y FIRMADA.pdf');
+  var pdfFile = folder.createFile(pdf);
+  // Copia del JSON canónico: permite recalcular el hash en cualquier momento
+  folder.createFile(Utilities.newBlob(canon, 'application/json', base + ' · evidencia.json'));
+
+  var correo = '';
+  if (r[c.Email] && /@/.test(r[c.Email])) {
+    try {
+      MailApp.sendEmail({ to:r[c.Email], name:'Dr. Miguel Soto',
+        subject:'Su presupuesto firmado · ' + r[c.COT],
+        htmlBody:'<p>Estimada(o) ' + esc_(r[c.Nombre]) + ':</p><p>Le compartimos su presupuesto <b>' + r[c.COT] +
+          '</b> con los términos de anticipo que usted aceptó y firmó el ' + fechaMx_(ahora) + '.</p>' +
+          '<p>Para cualquier duda, comuníquese con nosotros al <b>55 6223 4133</b>.</p><p>Dr. Miguel Soto</p>',
+        attachments:[pdf] });
+      correo = r[c.Email];
+    } catch (mx) { correo = 'error: ' + mx.message; }
+  }
+
+  var upd = {};
+  upd[c.Estado] = 'firmada'; upd[c.FechaFirma] = ahora; upd[c.NombreEscrito] = evidencia.nombreEscrito;
+  upd[c.Tel4] = evid.tel4Verificado ? 'OK' : 'sesión app';
+  upd[c.IP] = evidencia.ip; upd[c.UserAgent] = evidencia.userAgent; upd[c.ZonaHoraria] = evidencia.zonaHoraria;
+  upd[c.Pantalla] = evidencia.pantalla; upd[c.FirmaPngId] = pngFile.getId(); upd[c.PdfId] = pdfFile.getId();
+  upd[c.HashDocumento] = hashDoc; upd[c.EvidenciaJSON] = JSON.stringify(evidencia); upd[c.CorreoEnviado] = correo;
+  Object.keys(upd).forEach(function (k) { sh.getRange(f.rowNum, Number(k) + 1).setValue(upd[k]); });
+  log_(r[c.Token], 'firmada', hashDoc, evidencia.ip + ' · ' + (origenLog === 'app' ? 'app' : 'web'));
+
+  return { ok:true, folio:r[c.Folio], hash:hashDoc, fechaFirma:ahora.toISOString(),
+    correo: correo && correo.indexOf('error') !== 0 ? correo : '',
+    pdfBase64: Utilities.base64Encode(pdf.getBytes()), pdfNombre: pdf.getName() };
+}
+
+// ═════════════════════════════════════ FIRMA DESDE LA APP DE PACIENTES
+// La app manda un boleto de un solo uso; aquí se confirma directo con el servidor de la app
+// (quién es la paciente, su teléfono verificado por WhatsApp y la cotización). Sin llaves compartidas.
+function boleto_(ticket, uso) {
+  if (!/^[A-Za-z0-9_-]{40,90}$/.test(String(ticket || ''))) throw new Error('Boleto inválido');
+  var res = UrlFetchApp.fetch(APP_API_BASE + '/interno/firma-boleto/' + encodeURIComponent(ticket),
+    { muteHttpExceptions:true, followRedirects:false });
+  if (res.getResponseCode() !== 200) throw new Error('No se pudo confirmar la identidad con la app (' + res.getResponseCode() + ')');
+  var d = JSON.parse(res.getContentText());
+  if (!d.ok || d.uso !== uso || !d.cot || !d.cot.id) throw new Error('Boleto no válido para esta acción');
+  return d;
+}
+
+function firmarApp_(b) {
+  var d = boleto_(b.ticket, 'firmar');
+  var acepta = b.aceptaciones || [];
+  var keys = terminos_('').map(function (x) { return x.k; });
+  for (var i = 0; i < keys.length; i++) if (acepta.indexOf(keys[i]) < 0) throw new Error('Debe aceptar cada uno de los términos');
+  if (!b.firmaPng || String(b.firmaPng).indexOf('data:image/png;base64,') !== 0) throw new Error('Falta su firma');
+  if (String(b.firmaPng).length > 400000) throw new Error('La imagen de la firma es demasiado grande');
+
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var sh = hoja_(), data = sh.getDataRange().getValues(), c = idx_(), f = null;
+    for (var j = 1; j < data.length; j++) {
+      if (data[j][c.COT] !== d.cot.id) continue;
+      if (data[j][c.Estado] === 'firmada') return { ok:true, yaFirmada:true, folio:data[j][c.Folio], hash:data[j][c.HashDocumento], fechaFirma:iso_(data[j][c.FechaFirma]) };
+      if (data[j][c.Estado] === 'pendiente') f = { row:data[j], rowNum:j + 1 };   // usa el presupuesto detallado que generó el Cotizador
+    }
+    if (!f) {
+      // No se envió liga: se crea la solicitud con lo que la app le mostró a la paciente
+      var q = d.cot;
+      var snapshot = { cot:String(q.id), fechaPresupuesto:String(q.fecha || ''), nombre:String(d.nombre),
+        lineas:[{ concepto:String(q.procedimiento || 'Procedimiento'), detalle:'' }],
+        total:Number(q.monto) || 0, anticipo:10000, pdfPresupuesto:'' };
+      var snapJson = JSON.stringify(snapshot), ahora = new Date();
+      var row = new Array(COLS.length).fill('');
+      row[c.Token] = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+      row[c.Folio] = 'FIR-' + String(data.length).padStart(4, '0'); row[c.COT] = q.id; row[c.PacienteId] = d.pacienteId || '';
+      row[c.Nombre] = d.nombre; row[c.Telefono] = soloDigitos_(d.telefono); row[c.Email] = '';
+      row[c.Total] = snapshot.total; row[c.Anticipo] = snapshot.anticipo;
+      row[c.SnapshotJSON] = snapJson; row[c.SnapshotHash] = sha256_(snapJson); row[c.TermsVersion] = TERMS_VERSION;
+      row[c.CreadoPor] = 'app-pacientes'; row[c.FechaCreacion] = ahora;
+      row[c.Expira] = new Date(ahora.getTime() + DIAS_VIGENCIA_LIGA * 86400000); row[c.Estado] = 'pendiente'; row[c.Aperturas] = 0;
+      sh.appendRow(row);
+      log_(row[c.Token], 'creada', row[c.Folio] + ' · ' + q.id, 'app-pacientes');
+      f = { row:row, rowNum:sh.getLastRow() };
+    }
+    var tel = soloDigitos_(d.telefono);
+    var evid = {
+      canal:'App de pacientes (pacientes.miguelsotomd.com)',
+      verificacion:'Sesión iniciada con código enviado por WhatsApp al ' + tel.replace(/\d(?=\d{4})/g, '•') +
+        (d.sesion && d.sesion.creadaEn ? ' el ' + fechaMx_(new Date(d.sesion.creadaEn)) : ''),
+      nombreEscrito:d.nombre, ip:String(d.ip || ''), userAgent:String(d.ua || '').slice(0, 300),
+      zonaHoraria:String(b.tz || ''), pantalla:String(b.pantalla || ''),
+      sesion:{ pacienteId:d.pacienteId, creadaEn:d.sesion && d.sesion.creadaEn, dispositivo:d.sesion && d.sesion.dispositivo }
+    };
+    return sellar_(f, acepta, String(b.firmaPng), evid, 'app');
+  } finally { lock.releaseLock(); }
+}
+
+function pdfApp_(b) {
+  var d = boleto_(b.ticket, 'pdf');
+  var data = hoja_().getDataRange().getValues(), c = idx_();
+  for (var j = 1; j < data.length; j++) {
+    if (data[j][c.COT] === d.cot.id && data[j][c.Estado] === 'firmada' && data[j][c.PdfId]) {
+      var blob = DriveApp.getFileById(data[j][c.PdfId]).getBlob();
+      return { ok:true, pdfBase64:Utilities.base64Encode(blob.getBytes()), pdfNombre:blob.getName() };
+    }
+  }
+  return { ok:false, error:'Este presupuesto aún no está firmado.' };
 }
 
 function estado_(ids) {
@@ -269,8 +364,8 @@ function estado_(ids) {
     var est = r[c.Estado];
     if (est === 'reemplazada' || est === 'anulada') continue;
     if (out[id] && out[id].estado === 'firmada') continue;
-    out[id] = { estado:est, folio:r[c.Folio], fechaFirma:iso_(r[c.FechaFirma]), aperturas:Number(r[c.Aperturas] || 0),
-      url: est === 'pendiente' ? FIRMA_BASE_URL + r[c.Token] : '' };
+    // Sin ligas: esta consulta es pública y solo informa el estado.
+    out[id] = { estado:est, folio:r[c.Folio], fechaFirma:iso_(r[c.FechaFirma]), aperturas:Number(r[c.Aperturas] || 0) };
   }
   return { ok:true, estados:out };
 }
@@ -334,8 +429,8 @@ function pdfHtml_(snap, terms, ev, hash, firmaPng, folio) {
     '<div class="lbl">Firma</div><div class="firma"><img src="' + firmaPng + '"><br>' + esc_(ev.nombreEscrito) +
     '<br><span style="color:#6B6059">Firmado electrónicamente el ' + fechaMx_(new Date(ev.fechaHoraServidor)) + ' (hora de la Ciudad de México)</span></div>' +
     '<div class="lbl">Constancia de evidencia</div><div class="ev">' +
-    'Liga personal enviada a: ' + esc_(ev.ligaEnviadaA.replace(/\d(?=\d{4})/g, '•')) + '<br>' +
-    'Verificación: nombre completo + últimos 4 dígitos del teléfono registrado ✔<br>' +
+    'Canal: ' + esc_(ev.canal) + '<br>' +
+    'Verificación de identidad: ' + esc_(ev.verificacion) + ' ✔<br>' +
     'Fecha y hora (servidor, UTC): ' + esc_(ev.fechaHoraServidor) + '<br>' +
     'Zona horaria del dispositivo: ' + esc_(ev.zonaHoraria) + ' · IP: ' + esc_(ev.ip || 'no disponible') + '<br>' +
     'Dispositivo: ' + esc_(ev.userAgent) + '<br>' +
