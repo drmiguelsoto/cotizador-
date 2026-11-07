@@ -314,15 +314,15 @@ function pdfHtml_(snap, terms, ev, hash, firmaPng, folio) {
   var T = terms.map(function (t, i) {
     return '<div class="t"><b>' + (i + 1) + '. ' + esc_(t.t) + '.</b> ' + esc_(t.p) + ' <span class="ok">✔ Aceptado</span></div>'; }).join('');
   return '<html><head><meta charset="utf-8"><style>' +
-    'body{font-family:Helvetica,Arial,sans-serif;color:#030707;font-size:10.5px;line-height:1.45;margin:28px 34px}' +
-    '.hdr{background:#030707;color:#F4F2F1;padding:14px 18px;letter-spacing:4px;font-size:12px}' +
-    '.hdr small{display:block;color:#A19487;font-size:7.5px;letter-spacing:3px;margin-top:3px}' +
-    'h2{font-family:Georgia,serif;font-weight:normal;font-size:17px;margin:18px 0 4px}' +
-    '.lbl{font-size:7.5px;letter-spacing:2.5px;text-transform:uppercase;color:#6B6059;margin:16px 0 6px;font-weight:bold}' +
+    'body{font-family:Helvetica,Arial,sans-serif;color:#030707;font-size:9.5px;line-height:1.4;margin:18px 28px}' +
+    '.hdr{color:#030707;padding:0 0 8px;border-bottom:2px solid #030707;letter-spacing:5px;font-size:13px}' +
+    '.hdr small{display:block;color:#8A7B6C;font-size:7.5px;letter-spacing:3px;margin-top:3px}' +
+    'h2{font-family:Georgia,serif;font-weight:normal;font-size:16px;margin:12px 0 2px}' +
+    '.lbl{font-size:7px;letter-spacing:2.5px;text-transform:uppercase;color:#6B6059;margin:11px 0 5px;font-weight:bold}' +
     'table{width:100%;border-collapse:collapse}td{padding:5px 0;border-bottom:1px solid #E9E6E1;vertical-align:top}.m{color:#6B6059;text-align:right}' +
     '.tot{display:flex;justify-content:space-between;font-size:13px;margin-top:8px}.t{margin:0 0 7px}.ok{color:#3a7d44;font-size:9px;white-space:nowrap}' +
-    '.firma{border:1px solid #D8D2CB;padding:10px;margin-top:6px}.firma img{height:90px}' +
-    '.ev{font-family:Courier,monospace;font-size:8.5px;background:#F5F2EE;padding:10px;word-break:break-all;line-height:1.55}' +
+    '.firma{border:1px solid #D8D2CB;padding:10px;margin-top:6px}.firma img{height:70px}' +
+    '.ev{font-family:Courier,monospace;font-size:8.5px;background:#F5F2EE;padding:8px;word-break:break-all;line-height:1.45}' +
     '</style></head><body>' +
     '<div class="hdr">DR. MIGUEL SOTO<small>ACEPTACIÓN DE PRESUPUESTO · ' + esc_(folio) + '</small></div>' +
     '<h2>' + esc_(snap.nombre) + '</h2><div style="color:#6B6059">Presupuesto ' + esc_(snap.cot) +
@@ -342,7 +342,7 @@ function pdfHtml_(snap, terms, ev, hash, firmaPng, folio) {
     'Huella del presupuesto (SHA-256): ' + esc_(ev.snapshotHash) + '<br>' +
     'Huella de la firma (SHA-256): ' + esc_(ev.firmaPngSha256) + '<br>' +
     '<b>Huella del documento (SHA-256): ' + esc_(hash) + '</b></div>' +
-    '<div style="margin-top:12px;color:#6B6059;font-size:8.5px">Dr. Miguel Ángel Soto Miranda · Miramontes 2342, Coyoacán, C.P. 04460, CDMX · 55 6223 4133</div>' +
+    '<div style="margin-top:6px;color:#6B6059;font-size:7.5px">Dr. Miguel Ángel Soto Miranda · Miramontes 2342, Coyoacán, C.P. 04460, CDMX · 55 6223 4133</div>' +
     '</body></html>';
 }
 

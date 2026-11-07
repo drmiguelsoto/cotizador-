@@ -271,7 +271,7 @@ function listo(d){
   $('d-nombre').textContent = (DATA && DATA.presupuesto ? DATA.presupuesto.nombre : d.nombre) || '';
   var f = d.fechaFirma ? new Date(d.fechaFirma).toLocaleString('es-MX',{dateStyle:'long',timeStyle:'short',timeZone:'America/Mexico_City'}) : '';
   $('d-msg').textContent = d.yaFirmada ? 'Este presupuesto ya fue firmado' + (f ? ' el ' + f : '') + '. No es necesario volver a firmarlo.'
-    : 'Su firma quedó registrada el ' + f + '.' + (d.correo ? ' Le enviamos una copia a ' + d.correo + '.' : '');
+    : 'Su firma quedó registrada el ' + f.replace(/\.$/,'') + '.' + (d.correo ? ' Le enviamos una copia a ' + d.correo + '.' : '');
   $('d-hash').textContent = 'Huella del documento (SHA-256): ' + (d.hash || '');
   if (d.pdfBase64) {
     var btn = $('d-pdf'); btn.classList.remove('hidden');
