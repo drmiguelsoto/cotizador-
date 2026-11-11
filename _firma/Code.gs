@@ -19,6 +19,12 @@ var DIAS_VIGENCIA_LIGA = 30;
 var TERMS_VERSION = 'T-2026-11-v1';
 // Servidor de la app de pacientes: confirma cada firma hecha dentro de la app (boleto de un solo uso)
 var APP_API_BASE = 'https://app-pacientes-api-production.up.railway.app';
+// Cuentas del equipo que pueden ver presupuestos firmados (igual que la lista del Cotizador)
+var EQUIPO = ['miguelsotomd@gmail.com','miguelitosotomd@gmail.com','workspacemiguelsoto@gmail.com',
+  'miguelsotoadmi@gmail.com','sotoagenda@gmail.com','medicosmiguelsotomd@gmail.com',
+  'medicosmiguelsotomd1.1@gmail.com','medicosmiguelsotomd1.2@gmail.com','miguelsotouniverse@gmail.com'];
+// Cliente OAuth del Cotizador: solo se aceptan accesos emitidos para esa app
+var COTIZADOR_CLIENT_ID = '536486651249-cu5iq19frldtvvpsd1mamnqlr0attuab.apps.googleusercontent.com';
 var CREADORES_PERMITIDOS = /@(gmail\.com|miguelsotomd\.com|renaste\.com|zorvix\.mx)$/i;
 
 var COLS = ['Token','Folio','COT','PacienteId','Nombre','Telefono','Email','Total','Anticipo',
@@ -105,6 +111,7 @@ function doPost(e) {
     if (body.action === 'anular')         return json_(anular_(body));
     if (body.action === 'firmarApp')      return json_(firmarApp_(body));
     if (body.action === 'pdfApp')         return json_(pdfApp_(body));
+    if (body.action === 'pdfEquipo')      return json_(pdfEquipo_(body));
     return json_({ ok:false, error:'Acción no reconocida' });
   } catch (err) {
     return json_({ ok:false, error: String(err && err.message || err) });
@@ -381,6 +388,38 @@ function anular_(b) {
     }
   }
   return { ok:true, anuladas:n };
+}
+
+// ═════════════════════════════════════ PDF PARA EL EQUIPO (Cotizador)
+// Identidad: el acceso a Drive que el usuario ya concedió al Cotizador. Google dice de quién es;
+// aquí se revisa que sea del Cotizador y de una cuenta del equipo.
+function quienEs_(accessToken) {
+  var t = String(accessToken || '');
+  if (!/^[A-Za-z0-9._\-]{20,4096}$/.test(t)) throw new Error('Conecte Drive en el Cotizador y vuelva a intentar');
+  var info = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(t), { muteHttpExceptions:true });
+  if (info.getResponseCode() !== 200) throw new Error('Su sesión de Drive venció. Vuelva a conectar Drive en el Cotizador.');
+  var ti = JSON.parse(info.getContentText());
+  if (ti.azp !== COTIZADOR_CLIENT_ID && ti.aud !== COTIZADOR_CLIENT_ID) throw new Error('Acceso no válido');
+  var about = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',
+    { headers:{ Authorization:'Bearer ' + t }, muteHttpExceptions:true });
+  if (about.getResponseCode() !== 200) throw new Error('No se pudo confirmar su cuenta');
+  var email = String(JSON.parse(about.getContentText()).user.emailAddress || '').toLowerCase();
+  if (EQUIPO.indexOf(email) < 0) throw new Error('La cuenta ' + email + ' no está autorizada para ver presupuestos firmados');
+  return email;
+}
+
+function pdfEquipo_(b) {
+  var email = quienEs_(b.accessToken);
+  var cot = String(b.cot || '');
+  var data = hoja_().getDataRange().getValues(), c = idx_();
+  for (var j = 1; j < data.length; j++) {
+    if (data[j][c.COT] === cot && data[j][c.Estado] === 'firmada' && data[j][c.PdfId]) {
+      var blob = DriveApp.getFileById(data[j][c.PdfId]).getBlob();
+      log_(data[j][c.Token], 'pdf_visto', cot, email);
+      return { ok:true, pdfBase64:Utilities.base64Encode(blob.getBytes()), pdfNombre:blob.getName(), folio:data[j][c.Folio] };
+    }
+  }
+  return { ok:false, error:'Este presupuesto aún no está firmado.' };
 }
 
 // ═════════════════════════════════════ SNAPSHOT DEL PRESUPUESTO
