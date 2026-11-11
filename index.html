@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-11-07 · Firma electrónica de aceptación (firma.miguelsotomd.com) · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
+<!-- COTIZADOR · v2026-11-11 · Ver presupuesto firmado (📄) · Firma electrónica de aceptación (firma.miguelsotomd.com) · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -3106,6 +3106,9 @@ function renderHistory(){
     } else if (_ef && _ef.estado === 'pendiente') {
       firmaBadge = '<span title="Liga enviada · abierta ' + (_ef.aperturas || 0) + ' vez(es)" style="font-size:8px;letter-spacing:1px;background:#fff;color:#b07d10;border:1px solid #d4a017;padding:1px 6px;border-radius:2px;margin-left:6px">✍ POR FIRMAR' + (_ef.aperturas ? ' · VISTA' : '') + '</span>';
     }
+    var verFirmadoBtn = (_ef && _ef.estado === 'firmada')
+      ? '<div class="del-hist" style="color:#0f9d58" onclick="event.stopPropagation();verFirmado('+i+',this)" title="Abrir el presupuesto aceptado y firmado (PDF)">📄 ver firmado</div>'
+      : '';
     var firmaBtn = (!esSustituida && !(_ef && _ef.estado === 'firmada'))
       ? '<div class="del-hist" style="color:#6B6059" onclick="event.stopPropagation();enviarAFirma('+i+')" title="Enviar liga de firma por WhatsApp">✍ ' + (_ef && _ef.estado === 'pendiente' ? 'reenviar firma' : 'enviar a firma') + '</div>'
       : '';
@@ -3128,6 +3131,7 @@ function renderHistory(){
       '<div style="text-align:right;flex-shrink:0">'+
         '<div class="h-amt">'+fmt(h.total)+'</div>'+
         firmaBtn+
+        verFirmadoBtn+
         aceptarBtn+
         sustituirBtn+
         reRegBtn+
@@ -5490,6 +5494,34 @@ async function enviarAFirma(i){
   } catch (e) {
     toast('⚠ No se pudo generar la liga de firma: ' + e.message,'error');
   }
+}
+
+// Abre el PDF firmado. La identidad la confirma el sistema de firmas con el acceso
+// a Drive que el usuario ya dio al Cotizador (solo cuentas del equipo).
+function verFirmado(i, el){
+  var h = qHistory[i];
+  if (!h) return;
+  var ventana = window.open('', '_blank');           // antes de esperar, para que el navegador no la bloquee
+  if (ventana) { try { ventana.document.write('<p style="font:14px sans-serif;padding:24px;color:#6B6059">Abriendo presupuesto firmado…</p>'); } catch(e){} }
+  var txt = el ? el.textContent : '';
+  if (el) el.textContent = '⏳ abriendo…';
+  var fin = function(){ if (el) el.textContent = txt; };
+  _historialEnsureDriveToken(async function(err, token){
+    if (err || !token) { fin(); if (ventana) ventana.close(); toast('Conecta Drive en el Cotizador (indicador de arriba a la derecha) y vuelve a intentar.','error'); return; }
+    try {
+      var r = await fetch(FIRMA_GATEWAY_URL, { method:'POST', body: JSON.stringify({ action:'pdfEquipo', cot:h.id, accessToken:token }) });
+      var d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'No disponible');
+      var bin = atob(d.pdfBase64), u = new Uint8Array(bin.length);
+      for (var k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+      var url = URL.createObjectURL(new Blob([u], { type:'application/pdf' }));
+      if (ventana) ventana.location = url; else window.open(url, '_blank');
+      fin();
+    } catch (e) {
+      fin(); if (ventana) ventana.close();
+      toast('⚠ No se pudo abrir el presupuesto firmado: ' + e.message, 'error');
+    }
+  }, true);
 }
 
 // ══════════════════════════════════════════════════════
