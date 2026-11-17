@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-11-11 · Ver presupuesto firmado (📄) · Firma electrónica de aceptación (firma.miguelsotomd.com) · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
+<!-- COTIZADOR · v2026-11-17 · Descuento de Tiempo Quirúrgico (clínica/Zorvix) · Ver presupuesto firmado (📄) · Firma electrónica de aceptación (firma.miguelsotomd.com) · Cirugia editable: nombre del procedimiento y monto de cada componente editables en el customizer (cargar una parecida y modificar) · Busqueda global · PDF Carta uniforme -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -751,11 +751,15 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
       <label for="descuento-energy" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Energy Devices (%)</label>
       <input type="number" id="descuento-energy" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:10px">
+      <label for="descuento-qx" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Tiempo Quirúrgico · Clínica (%)</label>
+      <input type="number" id="descuento-qx" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
+    </div>
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
       <label for="descuento" style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;flex:1">Descuento General (%)</label>
       <input type="number" id="descuento" min="0" max="100" value="0" oninput="renderQuote()" style="width:64px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:6px 9px;font-size:12px;font-family:'Gatwick','Outfit',sans-serif;text-align:right;outline:none;color:var(--black);font-weight:500">
     </div>
-    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios, inyectables y energy devices se descuentan primero (afectan la parte del Dr.). El descuento general se aplica al total después.</div>
+    <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios, inyectables y energy devices se descuentan primero (afectan la parte del Dr.). El de Tiempo Quirúrgico afecta el cargo de la clínica (Zorvix). El descuento general se aplica al total después.</div>
 
     <!-- Precio Objetivo -->
     <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
@@ -1859,7 +1863,7 @@ let _sustituyendoA = null;                                     // COT original c
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-10-16 · Cirugía editable (nombre + montos)';
+var COTIZADOR_VERSION = 'v2026-11-17 · Descuento de Tiempo Quirúrgico (clínica)';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -2508,6 +2512,7 @@ function renderQuote() {
   const honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
   const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
   const energyDisc = parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
+  const qxDisc = parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
 
   // Selection bar update
   updateSelBar();
@@ -2555,6 +2560,11 @@ function renderQuote() {
   var totHon2 = selected.reduce(function(s,x){return s+(x.breakdown.hon.on?x.breakdown.hon.v:0);},0) + extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
   var honDiscAmt2 = totHon2 * honDisc / 100;
   var totHonNet2 = totHon2 - honDiscAmt2;
+
+  // Descuento de Tiempo Quirúrgico (cargo de la clínica / Zorvix). Solo afecta el
+  // renglón de Tiempo Quirúrgico; la Noche de Hospitalización no se descuenta.
+  var totQxAll = selected.reduce(function(s,x){return s+(x.breakdown.qx&&x.breakdown.qx.on?x.breakdown.qx.v:0);},0);
+  var qxDiscAmt2 = totQxAll * qxDisc / 100;
 
   // Totales de apoyo (mismos valores de siempre, solo reubicados)
   var totAnestUp = selected.reduce(function(s,x){return s+(x.breakdown.anest.on?x.breakdown.anest.v:0);},0);
@@ -2666,11 +2676,20 @@ function renderQuote() {
     if(multi) html+='<td class="r" style="font-size:10px;color:var(--soft);white-space:normal">'+qxNote+'</td>'; else html+=emptyNoteCell;
     html+='</tr>';
 
+    // Descuento autorizado sobre el Tiempo Quirúrgico (solo el cargo de clínica).
+    var totQxNet = totQx;
+    if (totQx > 0 && qxDisc > 0) {
+      totQxNet = totQx - qxDiscAmt2;
+      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Subtotal Tiempo Quirúrgico:</td><td class="r">'+fmt(totQx)+'</td>'+emptyNoteCell+'</tr>';
+      html += '<tr style="color:var(--green)"><td colspan="3" style="text-align:right;font-weight:500">Descuento Autorizado Tiempo Quirúrgico ('+qxDisc+'%):</td><td class="r" style="font-weight:600">− '+fmt(qxDiscAmt2)+'</td>'+emptyNoteCell+'</tr>';
+      html += '<tr class="stotal"><td colspan="3" style="text-align:right">Tiempo Quirúrgico c/Descuento:</td><td class="r">'+fmt(totQxNet)+'</td>'+emptyNoteCell+'</tr>';
+    }
+
     if (totHospOnly > 0) {
       html+='<tr><td>1</td><td>'+labels['hosp']+'</td><td class="r">'+fmt(totHospOnly)+'</td><td class="r">'+fmt(totHospOnly)+'</td>'+emptyNoteCell+'</tr>';
     }
 
-    html+='<tr class="stotal"><td colspan="3" style="text-align:right">Total Clínica (Zorvix):</td><td class="r">'+fmt(totQx+totHospOnly)+'</td>'+emptyNoteCell+'</tr>';
+    html+='<tr class="stotal"><td colspan="3" style="text-align:right">Total Clínica (Zorvix):</td><td class="r">'+fmt(totQxNet+totHospOnly)+'</td>'+emptyNoteCell+'</tr>';
     html+='</tbody></table>';
   }
 
@@ -2741,9 +2760,11 @@ function renderQuote() {
   }, 0);
   var energyDiscAmt = totEnergy * energyDisc / 100;
   grandSub = grandSub - energyDiscAmt;
+  // Descuento de Tiempo Quirúrgico (cargo de la clínica), antes del descuento general.
+  grandSub = grandSub - qxDiscAmt2;
   var discAmt = grandSub*disc/100;
   var grandTot = grandSub-discAmt;
-  if(honDisc>0 || disc>0 || inyDisc>0 || energyDisc>0){
+  if(honDisc>0 || disc>0 || inyDisc>0 || energyDisc>0 || qxDisc>0){
     var bruto = totHon2 + totHosp + totModulos;
     html+='<div class="sub-line"><span>Subtotal Bruto</span><span>'+fmt(bruto)+'</span></div>';
     if(honDisc>0){
@@ -2754,6 +2775,9 @@ function renderQuote() {
     }
     if(energyDisc>0){
       html+='<div class="sub-line disc"><span>Descuento Energy Devices ('+energyDisc+'%)</span><span>− '+fmt(energyDiscAmt)+'</span></div>';
+    }
+    if(qxDisc>0){
+      html+='<div class="sub-line disc"><span>Descuento Tiempo Quirúrgico ('+qxDisc+'%)</span><span>− '+fmt(qxDiscAmt2)+'</span></div>';
     }
     if(disc>0){
       html+='<div class="sub-line disc"><span>Descuento General ('+disc+'%)</span><span>− '+fmt(discAmt)+'</span></div>';
@@ -2808,10 +2832,12 @@ function updateSelBar() {
   const disc = parseFloat(document.getElementById('descuento').value)||0;
   const inyDisc = parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
   const energyDisc = parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
+  const qxDisc = parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
   const honNet = honSub * (1 - honDisc/100);
   const inySubBar = moduleItems.reduce(function(s,it){ return s + (it.module==='inyectables' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
   const energySubBar = moduleItems.reduce(function(s,it){ return s + (it.module==='energy' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
-  const grandSub = honNet + restSub - (inySubBar * inyDisc/100) - (energySubBar * energyDisc/100);
+  const qxSubBar = selected.reduce(function(s,x){ return s + (x.breakdown.qx && x.breakdown.qx.on ? x.breakdown.qx.v : 0); }, 0);
+  const grandSub = honNet + restSub - (inySubBar * inyDisc/100) - (energySubBar * energyDisc/100) - (qxSubBar * qxDisc/100);
   const grandTot = grandSub * (1 - disc/100);
   tot.textContent = fmt(grandTot);
 }
@@ -2967,6 +2993,7 @@ async function saveQuote(){
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
   var inyDisc=parseFloat((document.getElementById('descuento-iny')||{}).value)||0;
   var energyDisc=parseFloat((document.getElementById('descuento-energy')||{}).value)||0;
+  var qxDisc=parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
   var honSub=0, restSub=0;
   selected.forEach(function(s){Object.keys(s.breakdown).forEach(function(k){if(s.breakdown[k].on){if(k==='hon')honSub+=s.breakdown[k].v;else restSub+=s.breakdown[k].v;}});});
   honSub+=extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
@@ -2976,7 +3003,9 @@ async function saveQuote(){
   var inyDiscAmt = inySub * inyDisc/100;
   var energySub=moduleItems.reduce(function(s,it){ return s + (it.module==='energy' ? (it.precio||0)*(it.qty||1) : 0); }, 0);
   var energyDiscAmt = energySub * energyDisc/100;
-  var total=(honSub*(1-honDisc/100)+restSub-inyDiscAmt-energyDiscAmt)*(1-disc/100);
+  var qxSub=selected.reduce(function(s,x){ return s + (x.breakdown.qx && x.breakdown.qx.on ? x.breakdown.qx.v : 0); }, 0);
+  var qxDiscAmt = qxSub * qxDisc/100;
+  var total=(honSub*(1-honDisc/100)+restSub-inyDiscAmt-energyDiscAmt-qxDiscAmt)*(1-disc/100);
   var ahora = new Date();
   var session = (typeof _authGetSession === 'function') ? _authGetSession() : null;
 
@@ -3023,6 +3052,7 @@ async function saveQuote(){
     descuentoHon:honDisc,
     descuentoIny:inyDisc,
     descuentoEnergy:energyDisc,
+    descuentoQx:qxDisc,
     total:total,
     status:'borrador',
     sustituyeA: _sustituyendoA || '',
@@ -3473,6 +3503,7 @@ function loadQuote(i){
   document.getElementById('descuento-hon').value=h.descuentoHon||0;
   var _elIny=document.getElementById('descuento-iny'); if(_elIny) _elIny.value=h.descuentoIny||0;
   var _elEnergy=document.getElementById('descuento-energy'); if(_elEnergy) _elEnergy.value=h.descuentoEnergy||0;
+  var _elQx=document.getElementById('descuento-qx'); if(_elQx) _elQx.value=h.descuentoQx||0;
   _selectedPatientId=h.pacienteId||'';
   selected=JSON.parse(JSON.stringify(h.selected||[]));
   selected.sort(function(a,b){ return procGrandTotal(b.proc) - procGrandTotal(a.proc); });
@@ -3566,6 +3597,7 @@ function resetForm(){
     document.getElementById('descuento-hon').value=0;
     var _elIny2=document.getElementById('descuento-iny'); if(_elIny2) _elIny2.value=0;
     var _elEnergy2=document.getElementById('descuento-energy'); if(_elEnergy2) _elEnergy2.value=0;
+    var _elQx2=document.getElementById('descuento-qx'); if(_elQx2) _elQx2.value=0;
     qCounter=parseInt(localStorage.getItem('ms_qc')||'1');
     updateQNum();buildProcsList();
     ['q-nombre','q-fnac','q-edad'].forEach(function(id){document.getElementById(id).textContent='—';});
@@ -3580,13 +3612,15 @@ function copyEmail(){
   if(!selected.length && !extras.length && !moduleItems.length){toast('Agrega procedimientos primero.','error');return;}
   var disc=parseFloat(document.getElementById('descuento').value)||0;
   var honDisc=parseFloat(document.getElementById('descuento-hon').value)||0;
-  var totHon=0,totHosp=0;
-  selected.forEach(function(s){var bk=s.breakdown;totHon+=(bk.hon.on?bk.hon.v:0);Object.keys(bk).filter(function(k){return k!=='hon';}).forEach(function(k){if(bk[k].on)totHosp+=bk[k].v;});});
+  var qxDisc=parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
+  var totHon=0,totHosp=0,totQx=0;
+  selected.forEach(function(s){var bk=s.breakdown;totHon+=(bk.hon.on?bk.hon.v:0);totQx+=(bk.qx&&bk.qx.on?bk.qx.v:0);Object.keys(bk).filter(function(k){return k!=='hon';}).forEach(function(k){if(bk[k].on)totHosp+=bk[k].v;});});
   totHon+=extras.reduce(function(s,e){return s+(e.hon?(e.p||0):0);},0);
   totHosp+=extras.reduce(function(s,e){return s+(e.hon?0:(e.p||0));},0);
   var honDiscAmt=totHon*honDisc/100;
   var totHonNet=totHon-honDiscAmt;
-  var sub=totHonNet+totHosp;
+  var qxDiscAmt=totQx*qxDisc/100;
+  var sub=totHonNet+totHosp-qxDiscAmt;
   var discAmt=sub*disc/100;
   var total=sub-discAmt;
   var qNum=document.getElementById('q-num').textContent;
@@ -3601,6 +3635,7 @@ function copyEmail(){
   }
   txt+='\n── GASTOS DE HOSPITAL ──\n';
   txt+='Total Gastos Hospital: '+fmt(totHosp)+'\n';
+  if(qxDisc>0)txt+='Descuento Autorizado Tiempo Quirúrgico ('+qxDisc+'%): −'+fmt(qxDiscAmt)+'\n';
   if(disc>0)txt+='\nDescuento General ('+disc+'%): −'+fmt(discAmt)+'\n';
   txt+='\nGRAN TOTAL: '+fmt(total)+'\n\nVigencia: año en curso.\nAnticipo para apartar fecha: $10,000 (no reembolsable).\n\nTel: 55 6223 4133 | miguelsotomd@gmail.com\nMiramontes 2342, Coyoacán CDMX\n\nAtentamente,\nDr. Miguel Ángel Soto Miranda\nCirujano Plástico Certificado\nCéd. MG: 4132987 | AMCPER: 8129376 | CMCP: 1568';
   navigator.clipboard.writeText(txt).then(function(){toast('Texto copiado al portapapeles.','success');},function(){toast('No se pudo copiar.','error');});
@@ -4419,15 +4454,17 @@ function enviarWhatsApp() {
   var qNum   = document.getElementById('q-num').textContent;
   var disc   = parseFloat(document.getElementById('descuento').value)||0;
   var honDisc= parseFloat(document.getElementById('descuento-hon').value)||0;
+  var qxDisc = parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
 
-  var honSub=0, restSub=0;
+  var honSub=0, restSub=0, qxSub=0;
   selected.forEach(function(s){
     Object.keys(s.breakdown).forEach(function(k){
       if(s.breakdown[k].on){ if(k==='hon') honSub+=s.breakdown[k].v; else restSub+=s.breakdown[k].v; }
     });
+    if(s.breakdown.qx && s.breakdown.qx.on) qxSub += s.breakdown.qx.v;
   });
   restSub += extras.reduce(function(s,e){return s+e.p;},0);
-  var grandTot = (honSub*(1-honDisc/100)+restSub)*(1-disc/100);
+  var grandTot = (honSub*(1-honDisc/100)+restSub-qxSub*qxDisc/100)*(1-disc/100);
 
   var procs = selected.map(function(s){ return '• ' + s.proc.n; }).join('\n');
   if (extras.length) procs += '\n' + extras.map(function(e){ return '• ' + e.n; }).join('\n');
@@ -4436,7 +4473,7 @@ function enviarWhatsApp() {
     _pacSaludo() + ' ' + nombre + ', le comparto su cotización *' + qNum + '* de la consulta con el Dr. Miguel Ángel Soto Miranda.\n\n' +
     '*Procedimientos:*\n' + procs + '\n\n' +
     '*TOTAL: ' + fmt(grandTot) + '*' +
-    (disc>0||honDisc>0 ? ' _(con descuento autorizado)_' : '') + '\n\n' +
+    (disc>0||honDisc>0||qxDisc>0 ? ' _(con descuento autorizado)_' : '') + '\n\n' +
     '_Vigencia: año en curso · Anticipo para apartar fecha: $10,000 no reembolsable_\n\n' +
     'Le enviaremos la cotización completa en PDF por correo electrónico. Quedo a sus órdenes.\n\n' +
     'Dr. Miguel Ángel Soto Miranda — Cirujano Plástico Certificado\n' +
@@ -4488,15 +4525,17 @@ function enviarEmailConPDF() {
   var qNum    = document.getElementById('q-num').textContent;
   var disc    = parseFloat(document.getElementById('descuento').value)||0;
   var honDisc = parseFloat(document.getElementById('descuento-hon').value)||0;
+  var qxDisc  = parseFloat((document.getElementById('descuento-qx')||{}).value)||0;
 
-  var honSub=0, restSub=0;
+  var honSub=0, restSub=0, qxSub=0;
   selected.forEach(function(s){
     Object.keys(s.breakdown).forEach(function(k){
       if(s.breakdown[k].on){ if(k==='hon') honSub+=s.breakdown[k].v; else restSub+=s.breakdown[k].v; }
     });
+    if(s.breakdown.qx && s.breakdown.qx.on) qxSub += s.breakdown.qx.v;
   });
   restSub += extras.reduce(function(s,e){return s+e.p;},0);
-  var grandTot = (honSub*(1-honDisc/100)+restSub)*(1-disc/100);
+  var grandTot = (honSub*(1-honDisc/100)+restSub-qxSub*qxDisc/100)*(1-disc/100);
 
   var procs = selected.map(function(s){ return '  • ' + s.proc.n; }).join('\n');
   if (extras.length) procs += '\n' + extras.map(function(e){ return '  • ' + e.n; }).join('\n');
