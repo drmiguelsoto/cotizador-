@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- COTIZADOR · v2026-11-21b · Presupuesto bilingüe ES/EN + sección "Incluye/Includes" · Modo "Cotizar en dólares" (USD) con tipo de cambio configurable · Descuento de Tiempo Quirúrgico (clínica/Zorvix) · Ver presupuesto firmado (📄) · Firma electrónica · Cirugia editable · Busqueda global · PDF Carta uniforme -->
+<!-- COTIZADOR · v2026-11-21c · Botón "Cancelar firma" · Presupuesto bilingüe ES/EN + sección "Incluye/Includes" · Modo "Cotizar en dólares" (USD) con tipo de cambio configurable · Descuento de Tiempo Quirúrgico (clínica/Zorvix) · Ver presupuesto firmado (📄) · Firma electrónica · Cirugia editable · Busqueda global · PDF Carta uniforme -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1907,7 +1907,7 @@ var TIPO_CAMBIO = 19;          // MXN por USD cuando MONEDA==='USD'
 // ── SELLO DE VERSIÓN ──
 // Se imprime al cargar. Sirve para saber AL INSTANTE qué versión está publicada
 // (evita el clásico "¿subí el archivo correcto?" / caché del navegador).
-var COTIZADOR_VERSION = 'v2026-11-21b · Bilingüe ES/EN + Incluye + Dólares (USD)';
+var COTIZADOR_VERSION = 'v2026-11-21c · Cancelar firma + Bilingüe + Incluye + USD';
 console.log('%c[Cotizador] ' + COTIZADOR_VERSION + ' — paquetes FZ: ' +
   (typeof _construirPaquetesFZ === 'function' ? 'ACTIVOS ✓' : 'NO CARGADOS ✗'),
   'background:#2f6fb3;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold');
@@ -3198,6 +3198,10 @@ function renderHistory(){
     var firmaBtn = (!esSustituida && !(_ef && _ef.estado === 'firmada'))
       ? '<div class="del-hist" style="color:#6B6059" onclick="event.stopPropagation();enviarAFirma('+i+')" title="Enviar liga de firma por WhatsApp">✍ ' + (_ef && _ef.estado === 'pendiente' ? 'reenviar firma' : 'enviar a firma') + '</div>'
       : '';
+    // Cancelar firma: solo si hay una solicitud PENDIENTE (enviada y aún sin firmar).
+    var cancelarFirmaBtn = (_ef && _ef.estado === 'pendiente')
+      ? '<div class="del-hist" style="color:#c0392b" onclick="event.stopPropagation();cancelarFirma('+i+')" title="Anular la liga de firma enviada (el paciente ya no podrá firmar esta versión)">⊘ cancelar firma</div>'
+      : '';
     var aceptarBtn = esSustituida
       ? '<div class="del-hist" style="color:#8a7b6c" title="Reemplazada por ' + (h.sustituidaPor||'') + '">↳ ' + (h.sustituidaPor||'sustituida') + '</div>'
       : !esAceptada
@@ -3217,6 +3221,7 @@ function renderHistory(){
       '<div style="text-align:right;flex-shrink:0">'+
         '<div class="h-amt">'+fmt(h.total)+'</div>'+
         firmaBtn+
+        cancelarFirmaBtn+
         verFirmadoBtn+
         aceptarBtn+
         sustituirBtn+
@@ -5734,6 +5739,43 @@ async function enviarAFirma(i){
   } catch (e) {
     toast('⚠ No se pudo generar la liga de firma: ' + e.message,'error');
   }
+}
+
+// Cancela/anula una solicitud de firma PENDIENTE (p.ej. cuando cambió el presupuesto
+// después de haberla enviado). La liga anterior queda muerta: al abrirla, el paciente
+// verá que el presupuesto fue actualizado y debe pedir uno nuevo.
+// Requiere que el gateway de firmas soporte action:'cancelarSolicitud'.
+async function cancelarFirma(i){
+  var h = qHistory[i];
+  if (!h) return;
+  var _ef = _estadosFirma[h.id];
+  if (!(_ef && _ef.estado === 'pendiente')) { toast('No hay una liga de firma pendiente para '+h.id+'.','info'); return; }
+  confirmDialog(
+    'Cancelar envío a firma',
+    '¿Anular la liga de firma de ' + h.id + ' (' + h.nombre + ')? La liga enviada quedará sin efecto y el paciente ya no podrá firmar esta versión. Después puedes volver a enviar el presupuesto corregido.',
+    function(){
+      (async function(){
+        toast('Cancelando liga de firma…','info');
+        try {
+          var r = await fetch(FIRMA_GATEWAY_URL, { method:'POST', body: JSON.stringify({
+            action:'cancelarSolicitud',
+            cot: h.id,
+            folio: _ef.folio || '',
+            createdBy: (function(){ try { var ss = _authGetSession(); return (ss && ss.email) || ''; } catch(e){ return ''; } })()
+          }) });
+          var d = await r.json();
+          if (!d.ok) throw new Error(d.error || 'El gateway de firmas no aceptó la cancelación (¿falta desplegar la acción cancelarSolicitud?).');
+          // Quitar el estado pendiente localmente y refrescar desde el gateway.
+          delete _estadosFirma[h.id];
+          toast('✓ Liga de firma de ' + h.id + ' cancelada. Ya puedes reenviar el presupuesto corregido.','success');
+          renderHistory();
+          cargarEstadosFirma();
+        } catch (e) {
+          toast('⚠ No se pudo cancelar la firma: ' + e.message,'error');
+        }
+      })();
+    }
+  );
 }
 
 // Abre el PDF firmado. La identidad la confirma el sistema de firmas con el acceso
