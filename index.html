@@ -6131,7 +6131,19 @@ async function escribirACobros(h, opts) {
   var _honTotal = calcHonorariosTotal(h);
   var _renasteReal = calcRenasteRealCost(h);
   var _renasteLib = calcRenasteLiberable(h);
-  console.log('[Cobros] HonorariosTotal:', _honTotal, '| RenasteRealCost:', _renasteReal, '| RenasteLiberable:', _renasteLib);
+  // Monto que cobra la clínica/Zorvix = Tiempo Qx (neto de descuento) + Noche de hospitalización.
+  // Es exactamente el "Total Clínica (Zorvix)" del PDF. Va envuelto en try/catch para NO romper el registro.
+  var _clinicaTotal = (function(){
+    try {
+      var _selC = h.selected || [];
+      var _tq = _selC.reduce(function(s,x){ return s + ((x && x.breakdown && x.breakdown.qx && x.breakdown.qx.on) ? (x.breakdown.qx.v||0) : 0); }, 0);
+      var _th = _selC.reduce(function(ss,x){ return ss + ((x && x.breakdown && x.breakdown.hosp && x.breakdown.hosp.on) ? (x.breakdown.hosp.v||0) : 0); }, 0);
+      var _qd = Number(h.descuentoQx) || 0;
+      var _tqNet = (_tq > 0 && _qd > 0) ? (_tq - _tq * _qd / 100) : _tq;
+      return Math.round(_tqNet + _th);
+    } catch(_e){ return 0; }
+  })();
+  console.log('[Cobros] HonorariosTotal:', _honTotal, '| RenasteRealCost:', _renasteReal, '| RenasteLiberable:', _renasteLib, '| ClinicaCobra:', _clinicaTotal);
 
   var _sessionCobros = (typeof _authGetSession === 'function') ? _authGetSession() : null;
   var payload = {
@@ -6144,6 +6156,7 @@ async function escribirACobros(h, opts) {
     honorariosTotal: _honTotal,
     renasteRealCost: _renasteReal,
     renasteLiberable: _renasteLib,
+    clinicaCobra:     _clinicaTotal,
     vigencia:        new Date().getFullYear().toString(),
     estado:          'Aceptada',
     folioId:         '',
