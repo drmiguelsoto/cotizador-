@@ -503,6 +503,10 @@ body.auth-pending .shell { display: none !important; }
 body.auth-pending .toast-host { display: none !important; }
 body:not(.auth-pending) #auth-gate { display: none !important; }
 
+/* Roles. Lo marcado data-rol="FULL" solo lo ve quien entra como FULL.
+   El atributo data-rol del body lo pone el gate al abrir. */
+body[data-rol="COTIZA"] [data-rol="FULL"] { display: none !important; }
+
 #auth-gate {
   position: fixed; inset: 0; z-index: 99999;
   background: var(--cream);
@@ -797,8 +801,8 @@ body:not(.auth-pending) #auth-gate { display: none !important; }
     </div>
     <div style="font-size:9.5px;color:var(--soft);font-style:italic;margin-top:8px;line-height:1.4">Honorarios, inyectables y energy devices se descuentan primero (afectan la parte del Dr.). El de Tiempo Quirúrgico afecta el cargo de la clínica (Zorvix). El descuento general se aplica al total después.</div>
 
-    <!-- Precio Objetivo -->
-    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+    <!-- Precio Objetivo · solo FULL: es la herramienta de margen -->
+    <div data-rol="FULL" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
       <label style="font-size:9.5px;letter-spacing:1px;color:var(--mid);font-weight:500;display:block;margin-bottom:8px">PRECIO OBJETIVO</label>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:13px;color:var(--soft)">$</span>
@@ -1318,8 +1322,31 @@ const AUTH_WHITELIST = [
   'sotoagenda@gmail.com',
   'medicosmiguelsotomd@gmail.com',
   'medicosmiguelsotomd1.1@gmail.com',
-  'medicosmiguelsotomd1.2@gmail.com'
+  'medicosmiguelsotomd1.2@gmail.com',
+  'renasteqfb@gmail.com'
 ];
+// ──────────────────────────────────────────────────────────────────
+//  ROLES.  La whitelist de arriba dice QUIEN entra; esto dice QUE ve.
+//
+//    FULL    todo: precios de lista, descuentos y Precio Objetivo.
+//    COTIZA  arma cotizaciones y ve precios de lista, pero NO el
+//            Precio Objetivo, que no es un precio sino la herramienta
+//            de margen: despeja hasta donde se puede bajar un total.
+//            Eso es decision de direccion.
+//
+//  Quien no aparezca aqui es FULL. Se hizo asi a proposito: el dia que
+//  se agregue un correo a la whitelist y se olvide esta tabla, la app
+//  no se rompe. El costo es que un rol limitado hay que escribirlo.
+//  Un correo mal escrito aqui no abre nada de mas: solo deja a esa
+//  persona en FULL, y la whitelist sigue siendo la unica puerta.
+// ──────────────────────────────────────────────────────────────────
+const AUTH_ROLES = {
+  'renasteqfb@gmail.com': 'COTIZA',   // Vania · regulatorio
+};
+function _authRol(email) {
+  return AUTH_ROLES[String(email || '').trim().toLowerCase()] || 'FULL';
+}
+
 const AUTH_TTL_MS    = 24 * 60 * 60 * 1000;   // 24h de sesión
 const AUTH_LS_KEY    = 'ms_auth_v1';
 const AUTH_RL_KEY    = 'ms_auth_rl_v1';        // rate limit
@@ -1417,6 +1444,16 @@ function _authShowGate() {
 }
 function _authHideGate() {
   document.body.classList.remove('auth-pending');
+  _authAplicarRol();
+}
+
+/* Se llama cada vez que se abre el gate: al entrar con Google y al
+   restaurar una sesión guardada. Es idempotente a propósito. */
+function _authAplicarRol() {
+  const s = (typeof _authGetSession === 'function') ? _authGetSession() : null;
+  const rol = _authRol(s && s.email);
+  window.MS_ROL = rol;
+  document.body.setAttribute('data-rol', rol);
 }
 function _authShowError(msg) {
   const el = document.getElementById('auth-gate-error');
