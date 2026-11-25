@@ -1322,8 +1322,7 @@ const AUTH_WHITELIST = [
   'sotoagenda@gmail.com',
   'medicosmiguelsotomd@gmail.com',
   'medicosmiguelsotomd1.1@gmail.com',
-  'medicosmiguelsotomd1.2@gmail.com',
-  'renasteqfb@gmail.com'
+  'medicosmiguelsotomd1.2@gmail.com'
 ];
 // ──────────────────────────────────────────────────────────────────
 //  ROLES.  La whitelist de arriba dice QUIEN entra; esto dice QUE ve.
@@ -1341,7 +1340,7 @@ const AUTH_WHITELIST = [
 //  persona en FULL, y la whitelist sigue siendo la unica puerta.
 // ──────────────────────────────────────────────────────────────────
 const AUTH_ROLES = {
-  'renasteqfb@gmail.com': 'COTIZA',   // Vania · regulatorio
+  // 'correo@gmail.com': 'COTIZA',
 };
 function _authRol(email) {
   return AUTH_ROLES[String(email || '').trim().toLowerCase()] || 'FULL';
